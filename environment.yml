@@ -1,0 +1,15 @@
+name: nf-ggi
+
+channels:
+    - conda-forge
+    - bioconda
+
+dependencies:
+    - python==3.11
+    - pip
+    - bioconda::hhsuite
+    - conda-forge::jq
+    - conda-forge::rdkit
+    - pip:
+        - "-e /nemo/lab/johnsone/home/users/johnsoe/github/yunta"
+        - "-e /nemo/lab/johnsone/home/users/johnsoe/github/rf2t-micro"

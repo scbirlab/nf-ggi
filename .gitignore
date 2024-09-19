@@ -1,0 +1,8 @@
+.nextflow*
+/outputs/
+/work/
+/test/outputs
+/test/work
+/test/*.html
+~$*.xlsx
+*.html

@@ -1,0 +1,33 @@
+
+name: Nextflow test
+
+on: [push]
+
+jobs:
+  test:
+
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash -el {0}
+
+    steps:
+    - uses: easimon/maximize-build-space@master
+      with:
+        root-reserve-mb: 512
+        swap-size-mb: 1024
+        remove-dotnet: 'true'
+        remove-android: 'true'
+        remove-haskell: 'true'
+        remove-codeql: 'true'
+        remove-docker-images: 'true'
+    - uses: actions/checkout@v3
+    - uses: conda-incubator/setup-miniconda@v2
+      with:
+        python-version: 3.11
+        channels: conda-forge,bioconda
+        channel-priority: true
+    - uses: nf-core/setup-nextflow@v1
+    - name: Test Nextflow pipeline
+      run: |
+          nextflow run ${GITHUB_WORKSPACE} -c test/nextflow.config -profile gh -stub
