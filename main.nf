@@ -32,6 +32,9 @@ if ( params.help ) {
             uniclust, bfd        Paths to get HHblits databases.
 
          Optional parameters (with defaults):  
+            test           Whether to run in test mode. Default: false.
+            non_self       Whether to run in non_self mode. Default: false.
+            bactch_size    What size to batch protein-protein interactions into. Default: 100.
             rhea_url       URL to download Rhea reaction database. Default: "https://ftp.expasy.org/databases/rhea"
             outputs        Output folder. Default: "outputs".
 
@@ -66,24 +69,18 @@ coex = "coexpression"
 log.info """\
          S C B I R   G E N E - G E N E   I N T E R A C T I O N   P R E D I C T I O N   P I P E L I N E
          =============================================================================================
-         test mode                     : ${params.test}
+         test mode               : ${params.test}
+         non-self mode           : ${params.non_self}
          inputs
-            sample sheet               : ${params.sample_sheet}
-            UniClust database          : ${params.uniclust}
-            BFD                        : ${params.bfd}
-            Rhea                       : ${params.rhea_url}
-         output                        : ${params.outputs}
+            sample sheet         : ${params.sample_sheet}
+            UniClust database    : ${params.uniclust}
+            BFD                  : ${params.bfd}
+            Rhea                 : ${params.rhea_url}
+         batch size              : ${params.batch_size}
+         output                  : ${params.outputs}
          """
          .stripIndent()
 
-// dirs_to_make = [sequences, ppi, metabi]
-// println  """
-//             Making directories: 
-//           """.stripIndent()
-// dirs_to_make.each { 
-//    println "${it}: " 
-//    println file(it).mkdirs() ? "OK" : "Cannot create directory: ${it}"
-// }
 
 /*
 ========================================================================================
@@ -211,11 +208,11 @@ workflow {
       .set { msas_to_process }  // Organism ID, UniProtID, MSA file, batch_i, [MSA file, ...]
 
    // Calculate evolutionary coupling
-   // msas_to_process | RF2TRACK
    msas_to_process | DIRECT_COUPLING_ANALYSIS 
 
    if ( params.test ) {
-      // msas_to_process | ALPHAFOLD2
+      msas_to_process | RF2TRACK
+      msas_to_process | ALPHAFOLD2
    }
    // ALPHAFOLD2.out
    //           .map { it[2] }
@@ -469,6 +466,11 @@ process GET_MSA {
       fi
    done
    """
+
+   stub:
+   """
+   head -n2 ${fasta} > "${organism_id}-${uniprot_id}.a3m"
+   """
 }
 
 
@@ -541,6 +543,13 @@ process RF2TRACK {
       --output "${organism_id}-${uniprot_id}-batch_${batch_idx}_rf2t.tsv" \
       --plot "${organism_id}-${uniprot_id}-batch_${batch_idx}_rf2t"
    """
+
+   stub:
+   """
+   mkdir "${organism_id}-${uniprot_id}-batch_${batch_idx}_rf2t.tsv"
+   touch "${organism_id}-${uniprot_id}-batch_${batch_idx}_af2/plot.png"
+   echo "Skipping RF2t for stub"
+   """
 }
 
 
@@ -582,6 +591,13 @@ process ALPHAFOLD2 {
       --list-file \
       --output "${organism_id}-${uniprot_id}-batch_${batch_idx}_af2" \
       --plot "${organism_id}-${uniprot_id}-batch_${batch_idx}_af2"
+   """
+
+   stub:
+   """
+   mkdir "${organism_id}-${uniprot_id}-batch_${batch_idx}_af2"
+   touch "${organism_id}-${uniprot_id}-batch_${batch_idx}_af2/stub.pdb"
+   echo "Skipping AF2 for stub"
    """
 }
 
