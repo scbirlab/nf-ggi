@@ -118,7 +118,9 @@ The following parameters have default values which can be overridden if necessar
 
  - `rhea_url = "https://ftp.expasy.org/databases/rhea"`: URL to download Rhea reaction database
  - `outputs = "outputs"`: Output folder
+ - `batch_size = 100`: How many protein-protein interactions to group into one job at a time.
  - `test = false`: Whether to run in test mode. If so, only 3 proteins per organism will be analyzed.
+ - `non_self = false`: Whether to run in non-self mode. This is where a whole proteome is run against a single bait protein (rather than all pairwise from the proteome).
 
 The parameters can be provided either in the `nextflow.config` file or on the `nextflow run` command.
 
@@ -150,6 +152,12 @@ Here is an example of the sample sheet:
 | organism_id | proteome_name           |
 | ----------- | ----------------------- |
 | 243273      | "Mycoplasma genitalium" |
+
+If running with `--non-self`, to do a pulldown against a single bait protein, add another column with the bait UniProt ID.
+
+| organism_id | proteome_name           | bait   |
+| ----------- | ----------------------- | ------ |
+| 243273      | "Mycoplasma genitalium" | P47259 |
 
 ## Outputs
 
