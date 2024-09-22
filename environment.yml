@@ -5,11 +5,10 @@ channels:
     - bioconda
 
 dependencies:
-    - python==3.11
+    - python==3.12
     - pip
     - bioconda::hhsuite
     - conda-forge::jq
     - conda-forge::rdkit
     - pip:
-        - "-e /nemo/lab/johnsone/home/users/johnsoe/github/yunta"
-        - "-e /nemo/lab/johnsone/home/users/johnsoe/github/rf2t-micro"
+        - "yunta[cuda12]"
