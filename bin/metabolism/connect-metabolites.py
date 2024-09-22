@@ -18,6 +18,7 @@ from tqdm.auto import tqdm
 RDLogger.DisableLog('rdApp.*')     
 
 removers = (
+    lambda x: str.replace(x, ".[H+].", "").replace(".[H+]", "").replace("[H+].", ""),
     SaltRemover(defnData="[H,Na,K,Mg,Ca,Mn,Fe,F,Cl,Br,O,S]").StripMol,
     partial(SaltRemover().StripMol, dontRemoveEverything=True),
     AddHs,
@@ -35,23 +36,29 @@ def clean_metabolites(table: pd.DataFrame,
     return table.assign(**{col: table[col].apply(_clean_smiles_list) for col in cols})
 
 
-def _shared(a_b):
+def _shared(a_b) -> bool:
     a, b = (map(MolFromSmiles, a_or_b) for a_or_b in a_b)
     b = set(map(MolToInchi, b))
     return any(MolToInchi(item) in b for item in a)
 
 
-def _have_shared_chemical(df: pd.DataFrame, a: str, b: str):
+def _have_shared_chemical(df: pd.DataFrame, a: str, b: str) -> pd.Series:
     return df[[a, b]].progress_apply(_shared, axis=1)
+
+
+def _have_shared_chemical_simple(df: pd.DataFrame, col: str) -> pd.Series:
+    return df[col] == 1.
 
 mfpgen = rdFingerprintGenerator.GetMorganGenerator(radius=2, fpSize=2048)
 
 def _fingerprinter(a):
     return mfpgen.GetFingerprint(MolFromSmiles(a))
 
+
 def _tanimoto(a_b):
     a, b = a_b
     return max(TanimotoSimilarity(*map(_fingerprinter, items)) for items in product(*a_b))
+
 
 def _max_similarity(df: pd.DataFrame, a: str, b: str):
     return df[[a, b]].progress_apply(_tanimoto, axis=1)
@@ -83,11 +90,14 @@ def connect_metabolites(table: pd.DataFrame,
     table = table.merge(table2, how='cross').query(f"{id_col[0]} < {id_col[0]}_2")
 
     index_labels = tuple("_".join(items) for items in product(["r1", "p1"], ["r2", "p2"]))
-    print_err(f"By shared chemicals...")
-    table = table.assign(**{f"connection_{index_labels[i]}": partial(_have_shared_chemical, a=f"{a}_split", b=f"{b}_split") 
-                            for i, (a, b) in enumerate(product(cols, cols2))})
+    # print_err(f"By shared chemicals...")
+    # table = table.assign(**{f"connection_{index_labels[i]}": partial(_have_shared_chemical, a=f"{a}_split", b=f"{b}_split") 
+    #                         for i, (a, b) in enumerate(product(cols, cols2))})
     print_err(f"By maximum similarity...")
     table = table.assign(**{f"max_similarity_{index_labels[i]}": partial(_max_similarity, a=f"{a}_split", b=f"{b}_split") 
+                            for i, (a, b) in enumerate(product(cols, cols2))})
+    print_err(f"By shared chemicals...")
+    table = table.assign(**{f"connection_{index_labels[i]}": partial(_have_shared_chemical_simple, col=f"max_similarity_{index_labels[i]}") 
                             for i, (a, b) in enumerate(product(cols, cols2))})
 
     return table[[col for col in table if not col.endswith("_split")]]
