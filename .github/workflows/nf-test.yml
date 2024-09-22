@@ -21,4 +21,5 @@ jobs:
     - uses: nf-core/setup-nextflow@v1
     - name: Test Nextflow pipeline
       run: |
-          nextflow run ${GITHUB_WORKSPACE} -c test/nextflow.config -profile gh -stub
+        cd test
+        nextflow run .. -profile gh -stub
