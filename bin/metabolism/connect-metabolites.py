@@ -18,13 +18,14 @@ from tqdm.auto import tqdm
 RDLogger.DisableLog('rdApp.*')     
 
 removers = (
-    lambda x: str.replace(x, ".[H+].", "").replace(".[H+]", "").replace("[H+].", ""),
+    # lambda x: MolFromSmiles(MolToSmiles(x).replace(x, ".[H+].", "").replace(".[H+]", "").replace("[H+].", "")),
     SaltRemover(defnData="[H,Na,K,Mg,Ca,Mn,Fe,F,Cl,Br,O,S]").StripMol,
     partial(SaltRemover().StripMol, dontRemoveEverything=True),
     AddHs,
 )
 
-def _clean_smiles_list(smiles=str) -> str:
+def _clean_smiles_list(smiles: str) -> str:
+    smiles = smiles.replace(".[H+].", "").replace(".[H+]", "").replace("[H+].", "")
     mol = MolFromSmiles(smiles)
     for remover in removers:
         mol = remover(mol)

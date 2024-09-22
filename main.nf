@@ -239,7 +239,7 @@ process PULL_FASTA_SEQUENCES {
    function get_proteome_id() {
       curl -s "https://rest.uniprot.org/proteomes/search?query=(taxonomy_id:${organism_id})&format=json" | jq '.results[] | select(.proteomeType == "'"\$1"' proteome").id'
    }
-   QUERIES=("Reference and representative" "Representative" "Other")
+   QUERIES=("Reference and representative" "Reference" "Representative" "Other")
    PROTEOME_ID=
    for q in "\${QUERIES[@]}"
    do
@@ -500,7 +500,7 @@ process DIRECT_COUPLING_ANALYSIS {
    do
       echo "\$item" >> \$MSA_LIST
    done
-   sppid dca-single \
+   yunta dca-single \
       <(echo "ref/ref.a3m") \
       --msa2 \$MSA_LIST \
       --list-file \
@@ -536,7 +536,7 @@ process RF2TRACK {
    do
       echo "\$item" >> \$MSA_LIST
    done
-   PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True sppid rf2t-single \
+   PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True yunta rf2t-single \
       <(echo "ref/ref.a3m") \
       --msa2 \$MSA_LIST \
       --list-file \
@@ -585,7 +585,7 @@ process ALPHAFOLD2 {
    >&2 echo "LD library path at" \$LD_LIBRARY_PATH    # should exist and contain CUDNN_PATH
    >&2 echo "\$(nvcc --version)"
    >&2 python3 -c "import tensorflow as tf; print(f'Available devices:\\n{tf.config.list_physical_devices()}')"
-   XLA_PYTHON_CLIENT_MEM_FRACTION=.9 sppid af2-single \
+   XLA_PYTHON_CLIENT_MEM_FRACTION=.9 yunta af2-single \
       <(echo "ref/ref.a3m") \
       --msa2 \$MSA_LIST \
       --list-file \
