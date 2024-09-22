@@ -28,8 +28,12 @@ def _clean_smiles_list(smiles: str) -> str:
     smiles = smiles.replace(".[H+].", "").replace(".[H+]", "").replace("[H+].", "")
     mol = MolFromSmiles(smiles)
     for remover in removers:
-        mol = remover(mol)
-    return MolToSmiles(mol)
+        if mol is not None:
+            mol = remover(mol)
+    if mol is not None:
+        return MolToSmiles(mol)
+    else:
+        return ''
 
 
 def clean_metabolites(table: pd.DataFrame, 
