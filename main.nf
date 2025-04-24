@@ -214,14 +214,6 @@ workflow {
             ) }
             .set { mapping_input }
 
-         // mapping_input
-         //    .map { tuple( it[0][0], it[1], it[3], it[4] ) }
-         //    | get_gene_pairings // Organism ID, geneAB
-         // get_gene_pairings.out
-         //    .splitText( elem: 1 )
-         //    .map { [ it[0] ] + it[1].split(',') }
-         //    .set { gene_pairings }  // Organism ID, geneA, geneB
-
          mapping_input
             .map { tuple( it[0][0], it[0][0], it[1], it[2], it[3] ) }
             | map_uniprot_ids_from_file  // Organism ID, UniProtID A file
@@ -273,8 +265,18 @@ workflow {
       error "Unsupported mode: ${params.mode}. Choose from: organism, bait, custom."
    }
 
-   fastas_A
-      .concat( fastas_B ) // Organism ID, UniProtID, Entry Name, FASTA text
+   if ( params.test ) {
+      fastas_A.take(3).set { fastas_A2 }
+      fastas_B.take(3).set { fastas_B2 }
+   }
+
+   else {
+      fastas_A.set { fastas_A2 }
+      fastas_B.set { fastas_B2 }
+   }
+
+   fastas_A2
+      .concat( fastas_B2 ) // Organism ID, UniProtID, Entry Name, FASTA text
       .unique()
       .tap { all_fasta_info }
       .map { it[1..0] }  // UniProtID, Organism ID 
@@ -283,7 +285,7 @@ workflow {
 
    if ( params.metabolites ) {
       // Get reactants from Rhea database using UniProtIDs
-      fetch_rhea_database(rhea_url)
+      fetch_rhea_database( rhea_url )
       all_fasta_info  // Organism ID, UniProtID, Entry Name, FASTA text
          .collectFile( newLine: true ) { [ "${it[0]}.txt", it[1] ] }
          .map { tuple( it.getSimpleName(), it ) }  // Organism ID, UniProtID list file
@@ -328,7 +330,7 @@ workflow {
 
    all_msas
       .join(
-         fastas_B.map{ it[0..1] },
+         fastas_B2.map{ it[0..1] },
          by: [0, 1],
          failOnDuplicate: true,
       )  // Organism ID, bait UniProtID, bait MSA
@@ -341,16 +343,20 @@ workflow {
       )  // Organism ID, Bait UniProt ID, Bait MSA, UniProtID, MSA
       .set { crossed_msa } 
 
-   ( params.mode == 'self' ? 
-      crossed_msa.filter { it[1] < it[-2] } : crossed_msa.filter { it[1] != it[-2] } )  // If self-cross, only take lower triangle
+   ( 
+      params.mode == 'self' 
+      ? crossed_msa.filter { it[1] < it[-2] } 
+      : crossed_msa.filter { it[1] != it[-2] } 
+   )  // If self-cross, only take lower triangle
       .groupTuple( 
          by: [0, 1, 2]
       )  // Organism ID, Bait UniProt ID, Bait MSA, [UniProtID, ...], [MSA, ...]
-      // .view()
       .map { 
          tuple(
             it[0], it[1], it[2],
-            it[3].withIndex().collect { el, i -> Math.round(Math.floor(i / params.batch_size)) },
+            it[3].withIndex().collect { 
+               el, i -> Math.round(Math.floor(i / params.batch_size)) 
+            },
             it[3], it[4]
          ) 
       }  // Organism ID, Bait UniProt ID, Bait MSA, [batch_i, ...], [UniProtID, ...], [MSA, ...]
@@ -359,29 +365,52 @@ workflow {
          by: [0, 1, 2, 3]
       )  // Organism ID, Bait UniProt ID, Bait MSA, batch_i, [UniProtID, ...], [MSA, ...]
       .filter { it[-1].size() > 0 }  // filter out trivial (size-0) elements
-      .set { msa_pairs }
+      .set { msa_pairs0 }
+
+   if ( params.test ) {
+      msa_pairs0.take(3).set { msa_pairs }
+   }
+
+   else {
+      msa_pairs0.set { msa_pairs }
+   }
 
    // Calculate evolutionary coupling
    Channel.value( params.bait_is_taxon || params.interspecies ).set { interspecies }
    Channel.value( params.plots ).set { make_coevo_plots }
    if ( params.dca ) {
-      run_dca(msa_pairs, interspecies, make_coevo_plots)
+      run_dca( 
+         msa_pairs, 
+         interspecies, 
+         make_coevo_plots,
+      )
       stack_dca(
-         run_dca.out.main.groupTuple( by: 0 ),  // Organism ID, [tsv, ...]
+         run_dca.out.main
+            .groupTuple( by: 0 ),  // Organism ID, [tsv, ...]
          Channel.value( "dca" )
       )
    }
    if ( params.rf2t ) {
-      run_rf2track(msa_pairs, interspecies, make_coevo_plots)
+      run_rf2track( 
+         msa_pairs, 
+         interspecies, 
+         make_coevo_plots,
+      )
       stack_rf2t(
-         run_rf2track.out.main.groupTuple( by: 0 ),  // Organism ID, [tsv, ...]
+         run_rf2track.out.main
+            .groupTuple( by: 0 ),  // Organism ID, [tsv, ...]
          Channel.value( "rf2t" )
       )
    }
    if ( params.af2 ) {
-      run_af2(msa_pairs, interspecies, make_coevo_plots)
+      run_af2( 
+         msa_pairs, 
+         interspecies, 
+         make_coevo_plots,
+      )
       stack_af2(
-         run_af2.out.main.groupTuple( by: 0 ),  // Organism ID, [tsv, ...]
+         run_af2.out.main
+            .groupTuple( by: 0 ),  // Organism ID, [tsv, ...]
          Channel.value( "af2" )
       )
    }
