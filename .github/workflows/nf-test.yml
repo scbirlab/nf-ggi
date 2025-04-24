@@ -34,6 +34,6 @@ jobs:
         for d in */
         do
           cd $d
-          nextflow run ../.. -profile gh -stub
+          nextflow run ../.. -profile gh -stub && rm -r work
           cd ..
         done
