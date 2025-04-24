@@ -1,0 +1,2 @@
+organism_id,proteome_name,format,filename,column1,column2
+559292,"Saccharomyces cerevisiae (strain ATCC 204508 / S288c) (Baker's yeast)",Gene_Name,sgadata_costanzo2009_rawdata_101120-wheader_10q.txt,query_orf,array_orf
