@@ -49,6 +49,14 @@ process run_dca {
       "dca0.tsv" \
    > "dca.tsv"
    """
+
+   stub:
+   """
+   touch "dca.tsv"
+   mkdir "dca-plot"
+   touch "dca-plot/plot.png"
+   echo "Skipping RF2t for stub"
+   """
 }
 
 process run_rf2track {
