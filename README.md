@@ -230,7 +230,7 @@ The idea of using DCA, [RoseTTAFold](https://github.com/RosettaCommons/RoseTTAFo
 - [Humpreys et al., Computed structures of core eukaryotic protein complexes. _Science_, 2021](https://doi.org/10.1126/science.abm4805)
 - [Humpreys et al., Protein interactions in human pathogens revealed through deep learning. _Nature Microbiology_, 2024](https://doi.org/10.1038/s41564-024-01791-x)
 
-`scbirlab/nf-ggi` applies these algorithms in a Nextflow pipeline to allow easy scaling,a nd enables inter-species interactions. It also reconstructs metabolic networks, and pulls known interactions from the STRING database.
+`scbirlab/nf-ggi` applies these algorithms in a Nextflow pipeline to allow easy scaling, and enables inter-species interactions. It also reconstructs metabolic networks, and pulls known interactions from the STRING database.
 
 ## Issues, problems, suggestions
 
