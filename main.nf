@@ -266,8 +266,8 @@ workflow {
    }
 
    if ( params.test ) {
-      fastas_A.take(3).set { fastas_A2 }
-      fastas_B.take(3).set { fastas_B2 }
+      fastas_A.take(2).set { fastas_A2 }
+      fastas_B.take(2).set { fastas_B2 }
    }
 
    else {
@@ -368,7 +368,7 @@ workflow {
       .set { msa_pairs0 }
 
    if ( params.test ) {
-      msa_pairs0.take(3).set { msa_pairs }
+      msa_pairs0.take(2).set { msa_pairs }
    }
 
    else {
