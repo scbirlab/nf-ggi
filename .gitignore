@@ -4,5 +4,7 @@
 /test/outputs
 /test/work
 /test/*.html
+/test/slurm-*.out
 ~$*.xlsx
 *.html
+*.requirements.txt

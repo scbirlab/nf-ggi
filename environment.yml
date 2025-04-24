@@ -11,4 +11,4 @@ dependencies:
     - conda-forge::jq
     - conda-forge::rdkit
     - pip:
-        - "yunta[cuda12]"
+        - "yunta[cuda12]>=0.0.2"
