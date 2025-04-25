@@ -26,18 +26,44 @@ pipeline_title = """\
 */
 if ( params.help ) {
    println pipeline_title + """\
-         Usage:
-            nextflow run scbirlab/nf-ggi --accession <acc number>
+         Command-line usage:
+            nextflow run scbirlab/nf-ggi --uniclust <path> --bfd <path> --organism_id <taxon ID>
+            nextflow run scbirlab/nf-ggi --uniclust <path> --bfd <path> --organism_id <taxon ID> --bait <UniProtID>
+            nextflow run scbirlab/nf-ggi --uniclust <path> --bfd <path> --organism_id <taxon ID> --bait <taxon ID> --bait_is_taxon --interspecies
+            nextflow run scbirlab/nf-ggi --uniclust <path> --bfd <path> --organism_id <taxon ID> --filename <path> --column1 <gene-col1> --column2 <gene-col2> [--interspecies --organism_id2 <taxon ID>] [--format <gene-name-type>]
+         Config/sample sheet usage:
             nextflow run scbirlab/nf-ggi -c <config-file>
 
-         Required parameters:
-            sample_sheet         UniProt accession number for organism of interest.
-            uniclust, bfd        Paths to get HHblits databases.
+         Command-line required parameters:
+            --organism_id             Taxon ID for organism
+            Bait mode:
+               --bait                 UniProt ID for bait protein, or Taxon ID for bait organism
+            Custom mode:
+               --filename             Filename to get custom protein pairs
+               --column1, --column2   Column names from --filename to get protein IDs
 
-         Optional parameters (with defaults):  
+         Command-line optional parameters:
+            --bait_is_taxon  Indicate that bait is an organism ID
+            --interspecies   Run analysis between interacting species proteomes
+            --organism_id2   When providing a file of pairs, if the second protein (--column2) is from another organism than the first
+            --format         Type of gene identifier in --column1, --column2. Default: "Gene_Name"
+            --test           Whether to run in test mode. Default: false.
+            --outputs        Output folder. Default: "outputs".
+            --batch_size     What size to batch protein-protein interactions into. Default: 100.
+            --plots          Generate contact map plots
+
+         Config required parameters:
+            uniclust, bfd        Paths to get HHblits databases.
+            *and* either:
+               organism_id       Taxon ID for organism
+               (And all the same named flags above for command-line)
+            *or*
+               sample_sheet      CSV file with columns with same names as command-line flags, one row per combination to run
+               mode              "self" (all vs all), "bait" (all vs some), "custom" (some-vs-some)
+
+         Config optional parameters (with defaults):  
             test           Whether to run in test mode. Default: false.
-            non_self       Whether to run in non_self mode. Default: false.
-            batch_size    What size to batch protein-protein interactions into. Default: 100.
+            batch_size     What size to batch protein-protein interactions into. Default: 100.
             rhea_url       URL to download Rhea reaction database. Default: "https://ftp.expasy.org/databases/rhea"
             outputs        Output folder. Default: "outputs".
 

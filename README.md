@@ -103,12 +103,51 @@ source ~/.bash_profile
 
 ## Quick start
 
-Make a [sample sheet (see below)](#sample-sheet) and, optionally, a [`nextflow.config` file](#inputs) in the 
-directory where you want the pipeline to run. Then run Nextflow.
+There are three run modes for the pipeline:
+
+- "self": run all protein-protein interactions within an organism
+- "bait": run interactions between all proteins from an organism and either one protein or another organism's proteome
+- "custom": run specified protein pairs from a file
+
+The easiest way to get going is by specifying parameters on the command-line:
+
+```bash
+bfd=path/to/your/bfd
+uniclust=path/to/your/uniclust
+nextflow run scbirlab/nf-ggi --bfd "$bfd" --uniclust "$uniclust" --organism_id 243273 --dca --rf2t  --plots
+```
+
+Here's what the flags mean:
+-  `--organism_id`: The Taxon ID of the organism, whih you can find at NCBI or UniProt
+- `--dca`, `--rf2t`: Run direct-coupling analysis and RosettaFold-2track
+- `--plots`: Generate amino acid contact maps. This takes about 10MB per protein-protein interaction, so be sure you have enough disk space!
+
+You could also run `--metabolites` to get the metabolic network, and `--string` to get the STRING co-expression network.
+
+Because only `--organism_id` is provided, the pipeline assumes "self" mode (i.e. all-vs-all within taxon 243273).
+
+You can run bait mode by providing `--bait <UniProt ID>`:
+
+```bash
+nextflow run scbirlab/nf-ggi --bfd "$bfd" --uniclust "$uniclust" --organism_id 559292 --bait P00931 --dca
+```
+
+The bait can be another organisms's proteome. In this case, we need to specifiy that `--bait_is_taxon` and `--interspecies`:
+
+```bash
+nextflow run scbirlab/nf-ggi --bfd "$bfd" --uniclust "$uniclust" --organism_id 559292 --bait 1773 --bait_is_taxon --interspecies --rf2t
+```
+
+### Running more than one query in parallel
+
+Make a [sample sheet (see below)](#sample-sheet) with columns representing the flags above, and, optionally, a [`nextflow.config` file](#inputs) in the 
+directory where you want the pipeline to run. Then simply run:
 
 ```bash 
 nextflow run scbirlab/nf-ggi
 ```
+
+### Pipeline versions
 
 Each time you run the pipeline after the first time, Nextflow will use a locally-cached version which 
 will not be automatically updated. If you want to ensure that you're using the very latest version of the 
@@ -118,10 +157,10 @@ pipeline, use the `-latest` flag.
 nextflow run scbirlab/nf-ggi -latest
 ```
 
-If you want to run a particular tagged version of the pipeline, such as `v0.0.3`, you can do so using
+If you want to run a particular tagged version of the pipeline, such as `v0.0.1`, you can do so using
 
 ```bash 
-nextflow run scbirlab/nf-ggi -r v0.0.3
+nextflow run scbirlab/nf-ggi -r v0.0.1
 ```
 
 For help, use `nextflow run scbirlab/nf-ggi --help`.
@@ -131,67 +170,61 @@ This may take several minutes.
 
 ## Inputs
 
+### Command-line usage
+
+The pipeline can be run with command-line arguments:
+
+```bash
+nextflow run scbirlab/nf-ggi --uniclust <path> --bfd <path> --organism_id <taxon ID>
+nextflow run scbirlab/nf-ggi --uniclust <path> --bfd <path> --organism_id <taxon ID> --bait <UniProtID>
+nextflow run scbirlab/nf-ggi --uniclust <path> --bfd <path> --organism_id <taxon ID> --bait <taxon ID> --bait_is_taxon --interspecies
+nextflow run scbirlab/nf-ggi --uniclust <path> --bfd <path> --organism_id <taxon ID> --filename <path> --column1 <gene-col1> --column2 <gene-col2> [--interspecies --organism_id2 <taxon ID>] [--format <gene-name-type>]
+```
+
 The following parameters are **required**:
 
-- `sample_sheet`: filename of CSV with information about the samples and FASTQ files to be processed. Must be in the `inputs` folder (see below).
-- `uniclust`: Path to `hhblits` UniClust database. This is very large, so you need to have it already downlaoded on your system.
-- `bfd`: Path to `hhblits` BFD database. This is very large, so you need to have it already downlaoded on your system.
+```
+--organism_id             Taxon ID for organism
+Bait mode:
+    --bait                 UniProt ID for bait protein, or Taxon ID for bait organism
+Custom mode:
+    --filename             Filename to get custom protein pairs
+    --column1, --column2   Column names from --filename to get protein IDs
+```
 
 The following parameters are **optional**. They have default values which can
  be overridden if necessary.
 
- - `mode = "self"`: Which mode to run ([see below](#sample-sheet)). Options are: "self" (all vs all), "bait" (all vs some), "custom" (some-vs-some). 
- - `interspecies = false`: Whether the proteins come from two different species.
- - `bait_is_taxon = false`: In "bait" mode, the baits can be a taxon ID instead of individual proteins, in which case the pipeline will fetch the proteome for the bait taxon.
- - `inputs = "inputs"`: Folder to look for sample sheet and any other inputs
- - `outputs = "outputs"`: Folder to put outputs from the pipeline
- - `batch_size = 100`: How many protein-protein interactions to group into one job at a time.
- - `test = false`: Whether to run in test mode. If so, only 3 proteins per organism will be analyzed.
- - `rhea_url = "https://ftp.expasy.org/databases/rhea"`: URL to download Rhea reaction database
-
-The parameters can be provided either in the `nextflow.config` file or on the `nextflow run` command.
-
-Here is an example of the `nextflow.config` file:
-
-```nextflow
-params {
-    sample_sheet = "/path/to/sample-sheet.csv"
-}
+ ```bash
+--bait_is_taxon  Indicate that bait is an organism ID
+--interspecies   Run analysis between interacting species proteomes
+--plots          Generate contact map plots
+--organism_id2   When providing a file of pairs, if the second protein (--column2) is from another organism than the first
+--format         Type of gene identifier in --column1, --column2. Default: "Gene_Name"
+--test           Whether to run in test mode. Default: false.
+--outputs        Output folder. Default: "outputs".
+--batch_size     What size to batch protein-protein interactions into. Default: 100.
 ```
-
-Alternatively, you can provide the parameters on the command line:
-
-```bash
-nextflow run scbirlab/nf-ggi --sample_sheet /path/to/sample-sheet.csv 
-``` 
 
 ### Sample sheet
 
-The sample sheet is a **CSV** file indicating which organisms you want to analyze.
+You can run multiple combinations in one command using a sample sheet. The sample sheet is a **CSV** file with one row per combination of parameters to run. The column headings have the same names as the required flags for command-line usage. The optional flags are still on the command line, and applied to everything in the run. Here, the mode needs to be specified with `--mode`:
 
-The file must have a header with **required** column names below, and one line per combination to be processed.
+```bash
+nextflow run scbirlab/nf-ggi --mode self --rf2t --metabolites --sample_sheet path/to/sample-sheet.csv
+```
 
-- `organism_id`: the NCBI Taxonomic IDs for your organisms. This can be found at [NCBI Taxonomy](https://www.ncbi.nlm.nih.gov/taxonomy)
-
-In `mode = "bait"`, additionally **required**:
-- `bait`: Uniprot ID if `bait_is_taxon`, otherwise taxon ID
-
-In `mode = "custom"`, additionally **required**:
-- `filename`: The CSV or TSV file to get the custom combinations from
-- `column1`, `column2`: The names of the columns containing protein identifiers
-- `format`: The type of protein identifiers, which will be looked up on UniProt. `Gene_Name` works well and felxibly for most commonly used gene names; currently `UniprotID` doesn't work. 
-
-
-You can add extra columns with human-readable annotations for your own sanity. 
-We recommend:
-- `proteome_name`
-- (if using a bait) `bait_name`
+#### Sample sheet structure
 
 Here is an example of the sample sheet for `mode = "self"`, to find all the mycoplasma protein-protein interactions:
 
 | organism_id | proteome_name           |
 | ----------- | ----------------------- |
 | 243273      | "Mycoplasma genitalium" |
+
+The `proteome_name` column is not neccesary, but you can add extra columns with human-readable annotations for your own sanity. We recommend:
+- `proteome_name`
+- (if using a bait) `bait_name`
 
 If running with `mode = "bait"`, to do a pulldown against a single bait protein, add another column with the bait UniProt ID.
 
@@ -213,6 +246,32 @@ In this case, `combos.csv` must be in the `inputs` folder defined above. It woul
 | YAL058W	| CNE1            | YAL068C   |	PAU8            |
 
 Further examples are in the `test` directory of this repository.
+
+
+### Config-file usage (recommended)
+
+For reproducibility, self-documentation, and to save typing, parameters with the same names as the command line flags above can be provided in a `nextflow.config` file in the working directory. For example:
+
+```groovy
+params {
+    organism_id = "243273"
+    dca = true
+    rf2t = true
+}
+```
+
+Or with a sample sheet:
+
+```groovy
+params {
+    sample_sheet = "path/to/sample-sheet.csv"
+    mode = "self"
+    dca = true
+    rf2t = true
+    metabolites = true
+    string = true
+}
+```
 
 ## Outputs
 
