@@ -53,6 +53,8 @@ Then for each protein pair, optionally:
 
 ## Requirements
 
+You need access to the UniClust and BFD databases, and you need Nextflow and conda to be installed.
+
 ### Databases
 
 To generate multiple-sequence alignments (MSAs) for co-evolutionary analysis, `hhblits` databases of 
