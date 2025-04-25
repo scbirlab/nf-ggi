@@ -11,7 +11,7 @@ do
         -profile gh -stub \
         -c "$d"/nextflow.config \
         --test \
-        --sample-sheet "$d"/inputs.sample-sheet.csv \
+        --sample-sheet "$d"/inputs/sample-sheet.csv \
         --inputs "$d"/inputs \
         --outputs "$d"/outputs
 done
