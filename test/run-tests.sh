@@ -4,7 +4,6 @@ set -x
 set -e
 
 script_dir="$(dirname $0)"
-cd "$script_dir"  # move to tests directory
 
 for d in "$script_dir"/*/
 do
