@@ -55,7 +55,7 @@ process run_dca {
    touch "dca.tsv"
    mkdir "dca-plot"
    touch "dca-plot/plot.png"
-   echo "Skipping RF2t for stub"
+   echo "Skipping DCA for stub"
    """
 }
 

@@ -54,7 +54,25 @@ if ( params.help ) {
 ========================================================================================
 */
 if ( !params.sample_sheet ) {
-   throw new Exception("!!! PARAMETER MISSING: Please provide a sample sheet including UniProt proteome ID for organism of interest.")
+   if ( !params.organism_id ) {
+      throw new Exception("!!! PARAMETER MISSING: Please provide a sample sheet or at least --organism_id.")
+   }
+   if ( params.filename ) {
+      if ( !params.format ) {
+         throw new Exception("!!! PARAMETER MISSING: Please provide a --format when using --filename.")
+
+      }
+      if ( !params.column1 ) {
+         throw new Exception("!!! PARAMETER MISSING: Please provide a --column1 when using --filename.")
+         
+      }
+      if ( !params.column2 ) {
+         throw new Exception("!!! PARAMETER MISSING: Please provide a --column2 when using --filename.")
+         
+      }
+      
+   }
+
 }
 if ( !params.uniclust ) {
    throw new Exception("!!! PARAMETER MISSING: Please provide a path to UniClust database.")
@@ -63,35 +81,28 @@ if ( !params.bfd ) {
    throw new Exception("!!! PARAMETER MISSING: Please provide a path to BFD database.")
 }
 
-working_dir = params.outputs
-
-sequences = "sequences"
-ppi = "ppi"
-metabi = "metabolites"
-coex = "coexpression"
-
 log.info pipeline_title + """\
-         test mode               : ${params.test}
-         mode                    : ${params.mode}
-            Bait is Taxon ID     : ${params.bait_is_taxon}
-            Interspecies         : ${params.interspecies}
-         inputs
-            input_dir            : ${params.inputs}
-            sample sheet         : ${params.sample_sheet}
-            UniClust database    : ${params.uniclust}
-            BFD                  : ${params.bfd}
-            Rhea URL             : ${params.rhea_url}
-         batch size              : ${params.batch_size}
-         co-evolution analysis
-            Metabolites          : ${params.metabolites}
-            STRINGdb             : ${params.string}
-            DCA                  : ${params.dca}
-            RosettaFold-2track   : ${params.rf2t}           
-            AlphaFold2           : ${params.af2}              
-         output                  : ${params.outputs}
-            make plots?          : ${params.plots}
-         """
-         .stripIndent()
+   test mode               : ${params.test}
+   mode                    : ${params.mode}
+      Bait is Taxon ID     : ${params.bait_is_taxon}
+      Interspecies         : ${params.interspecies}
+   inputs
+      input_dir            : ${params.inputs}
+      sample sheet         : ${params.sample_sheet}
+      UniClust database    : ${params.uniclust}
+      BFD                  : ${params.bfd}
+      Rhea URL             : ${params.rhea_url}
+   batch size              : ${params.batch_size}
+   co-evolution analysis
+      Metabolites          : ${params.metabolites}
+      STRINGdb             : ${params.string}
+      DCA                  : ${params.dca}
+      RosettaFold-2track   : ${params.rf2t}           
+      AlphaFold2           : ${params.af2}              
+   output                  : ${params.outputs}
+      make plots?          : ${params.plots}
+   """
+   .stripIndent()
 
 
 /*
@@ -118,6 +129,8 @@ include {
    fetch_fasta_from_uniprot_id;
    map_uniprot_ids_from_file;
    map_uniprot_ids_from_file as map_uniprot_ids_from_file_bait;
+   map_gene_names_from_file as map_gene_names_from_file1;
+   map_gene_names_from_file as map_gene_names_from_file2;
 } from './modules/uniprot.nf'
 include {
    run_dca;
@@ -134,16 +147,47 @@ workflow {
    Channel.value( params.bfd ).set { bfd }
    Channel.value( params.uniclust ).set { uniclust }
    Channel.of( params.rhea_url ).set { rhea_url }
-   Channel.fromPath( 
-      params.sample_sheet,
-      checkIfExists: true, 
-   ).set {sample_sheet_ch}
 
-   sample_sheet_ch
-      .splitCsv( header: true )
+   if ( params.sample_sheet ) {
+
+      mode = params.mode
+
+      Channel.fromPath( 
+         params.sample_sheet,
+         checkIfExists: true, 
+      )
+         .splitCsv( header: true )
+         .set { sample_rows }
+
+   }
+
+   else {
+
+      Channel.of( [
+         organism_id: params.organism_id,
+         organism_id2: params.organism_id2,
+         bait: params.bait,
+         filename: params.filename,
+         format: params.format,
+         column1: params.column1,
+         column2: params.column2,
+      ] )
       .set { sample_rows }
 
-   if ( params.mode == 'self' || params.mode == 'bait' ) {
+      if ( params.bait ) {
+         mode = "bait"
+      }
+      else if ( params.filename ) {
+         mode = "custom"
+      }
+      else {
+         mode = "self"
+      }
+
+   }
+   
+
+   if ( mode == 'self' || mode == 'bait' ) {
 
       sample_rows
          .map { tuple( it.organism_id, it.organism_id ) }
@@ -157,7 +201,7 @@ workflow {
       ( params.test ? fastas_A0.take(3) : fastas_A0 )
          .set { fastas_A }
 
-      if ( params.mode == 'self' ) {
+      if ( mode == 'self' ) {
 
          fastas_A.set { fastas_B }
 
@@ -190,14 +234,17 @@ workflow {
 
          bait_fastas  // Organism ID, bait FASTA file
             .splitFasta( elem: 1, record: [id: true, text: true] )   // Organism ID, bait FASTA text
-            .map { [ it[0] ] + it[1].id.split('\\|')[1..2] + [ it[1].text ] }  // Organism ID, UniProtID, Entry Name, FASTA text
+            .map { 
+               [ it[0] ] + it[1].id.split('\\|')[1..2] + [ it[1].text ] 
+            }  // Organism ID, UniProtID, Entry Name, FASTA text
             .set { fastas_B }
          
       }
 
    }
 
-   else if ( params.mode == 'custom' ) {
+   else if ( mode == 'custom' ) {
+
         sample_rows
             .map { tuple(
                tuple( 
@@ -205,7 +252,7 @@ workflow {
                   ( params.interspecies ? it.organism_id2 : it.organism_id ),
                ), 
                file( 
-                  "${params.inputs}/${it.filename}", 
+                  "${params.sample_sheet ? params.inputs : '.'}/${it.filename}", 
                   checkIfExists: true,
                ),
                it.format,
@@ -223,10 +270,10 @@ workflow {
             | map_uniprot_ids_from_file_bait  // Organism ID, UniProtID B file
 
          map_uniprot_ids_from_file.out
-            .splitText( elem: 1 ) { v -> v.collect { it.trim() } }
+            .splitText( elem: 1 ) { v -> v.collect { it.toString().trim() } }
             .set { uniprot_A0 }  // Organism ID, UniProtID A 
          map_uniprot_ids_from_file_bait.out
-            .splitText( elem: 1 ) { v -> v.collect { it.trim() } }
+            .splitText( elem: 1 ) { v -> v.collect { it.toString().trim() } }
             .set { uniprot_B0 }  // Organism ID, UniProtID B 
 
          if ( params.test ) {
@@ -262,7 +309,7 @@ workflow {
    }
 
    else {
-      error "Unsupported mode: ${params.mode}. Choose from: organism, bait, custom."
+      error "Unsupported mode: ${mode}. Choose from: organism, bait, custom."
    }
 
    if ( params.test ) {
@@ -344,7 +391,7 @@ workflow {
       .set { crossed_msa } 
 
    ( 
-      params.mode == 'self' 
+      mode == 'self' 
       ? crossed_msa.filter { it[1] < it[-2] } 
       : crossed_msa.filter { it[1] != it[-2] } 
    )  // If self-cross, only take lower triangle
@@ -388,8 +435,17 @@ workflow {
          run_dca.out.main
             .groupTuple( by: 0 ),  // Organism ID, [tsv, ...]
          Channel.value( "dca" )
-      )
+      ) // Organism ID, tsv
+         | set { stacked_dca }
    }
+
+   else {
+
+      Channel.empty() 
+         .set { stacked_dca }
+
+   }
+
    if ( params.rf2t ) {
       run_rf2track( 
          msa_pairs, 
@@ -400,8 +456,17 @@ workflow {
          run_rf2track.out.main
             .groupTuple( by: 0 ),  // Organism ID, [tsv, ...]
          Channel.value( "rf2t" )
-      )
+      )  // Organism ID, tsv
+         | set { stacked_rf2t }
    }
+
+   else {
+
+      Channel.empty() 
+         .set { stacked_rf2t }
+
+   }
+
    if ( params.af2 ) {
       run_af2( 
          msa_pairs, 
@@ -412,8 +477,31 @@ workflow {
          run_af2.out.main
             .groupTuple( by: 0 ),  // Organism ID, [tsv, ...]
          Channel.value( "af2" )
-      )
+      )  // Organism ID, tsv
+         | set { stacked_af2 }
    }
+
+   else {
+
+      Channel.empty() 
+         .set { stacked_af2 }
+
+   }
+
+   stacked_dca
+      .concat(
+         stacked_rf2t,
+         stacked_af2,
+      )
+      .set { ppi_outputs }
+   map_gene_names_from_file1(
+      ppi_outputs,
+      Channel.value( "uniprot_id_1" )
+   )
+   map_gene_names_from_file2(
+      map_gene_names_from_file1.out,
+      Channel.value( "uniprot_id_2" )
+   )
 
 }
 

@@ -1,11 +1,11 @@
 process fetch_fastas_from_organism_id {
 
-   tag "${organism_id}"
+   tag "${id}"
 
    publishDir( 
       "${params.outputs}/sequences", 
       mode: 'copy',
-      saveAs: { "${organism_id}.fasta.gz" }
+      saveAs: { "${id}-${organism_id}.fasta.gz" }
    )
 
    input:
@@ -14,7 +14,6 @@ process fetch_fastas_from_organism_id {
    output:
    tuple val( id ), path( "proteome.fasta.gz" )
 
-   // TODO: filter only for representative proteome if no reference proteome
    script:
    """
    function get_proteome_id() {
@@ -51,7 +50,7 @@ process fetch_fasta_from_uniprot_id {
    publishDir( 
       "${params.outputs}/sequences", 
       mode: 'copy',
-      saveAs: { "${uniprot_id}.fasta" },
+      saveAs: { "${id}-${uniprot_id}.fasta" },
    )
 
    input:
@@ -75,7 +74,7 @@ process fetch_fasta_from_uniprot_id {
 
 process map_uniprot_ids_from_file {
 
-   tag "${id}-${column}"
+   tag "${id}-${column}:${from_type}"
 
    publishDir( 
       "${params.outputs}/uniprot_map", 
@@ -84,84 +83,22 @@ process map_uniprot_ids_from_file {
    )
 
    input:
-   tuple val( id ), val( organism_id ), path( filename ), val( format ), val( column )
+   tuple val( id ), val( organism_id ), path( filename ), val( from_type ), val( column )
 
    output:
    tuple val( id ), path( "uniprot-ids.txt" )
 
    script:
    """
-   get_job_status () (
-      local job_id="\$1"
-      curl -i 'https://rest.uniprot.org/idmapping/status/'"\$job_id" \
-         | tail -n1 \
-         | jq -r '.["jobStatus"]'
-   )
-   set -x
-   
-   if [[ "${filename}" == *.csv ]]
-   then 
-      sep=,
-   else
-      sep=\$'\\t'
-   fi
-
-   awk -F"\$sep" \
-      -v column="${column}" \
-      'NR == 1 { for (i = 1; i <= NF; i++) if ( \$i == column ) column_number = i } NR > 1 { print \$column_number }' \
-      "${filename}" \
-   | sort -u \
-   | split -l 25 - name-chunk_
-
-   chunks=( name-chunk_* )
-   for chunk in "\${chunks[@]}"
-   do
-
-      ids=\$(awk -v ORS="," '1' "\$chunk")
-      job_id=\$(
-         curl \
-            --request POST 'https://rest.uniprot.org/idmapping/run' \
-            --form 'ids="'"\$ids"'"' \
-            --form 'from="${format}"'\
-            --form 'to="UniProtKB"' \
-            --form 'taxId="${organism_id}"' \
-         | jq -r '.["jobId"]'
-      )
-      sleep 1
-      job_status=\$(get_job_status "\$job_id")
-      while [ "\$job_status" != "FINISHED" ]
-      do
-         if [  "\$job_status" == "ERROR" ]
-         then
-            echo "Got an error from UniProt for these inputs:"
-            echo " - ${format}: ""\$ids"
-            echo " - https://rest.uniprot.org/idmapping/status/""\$job_id""
-            echo " - https://rest.uniprot.org/idmapping/stream/""\$job_id""
-            exit 1
-         fi
-         sleep 1
-         echo "Checking status of \$job_id..."
-         job_status=\$(get_job_status "\$job_id")
-      done
-
-      echo "Job ready: \$job_id"
-      curl -s "https://rest.uniprot.org/idmapping/stream/""\$job_id" \
-      | jq -r '.["results"][]["to"]' \
-      >> "uniprot-ids0.txt"
-
-   done
-   cat "uniprot-ids0.txt" | sort -u > "uniprot-ids.txt"
-   yield=\$(wc -l < "uniprot-ids.txt")
-   if [ "\$yield" -eq 0 ]
-   then
-      echo "Did not find any UniProtKB IDs for filename ${filename}, column  ${column}! Example inputs:"
-      echo "\$(cat "\${chunks[0]}")"
-      echo "Check a lookup status here: "
-       echo " - ${format}: ""\$ids"
-      echo " - https://rest.uniprot.org/idmapping/status/""\$job_id""
-      echo " - https://rest.uniprot.org/idmapping/stream/""\$job_id""
-      exit 1
-   fi
+   bash ${projectDir}/bin/uniprot/uniprot-ids.sh \
+      "${filename}" "${column}" \
+      "uniprot-ids0.txt" \
+      UniProtKB ${from_type} \
+      "${organism_id}"
+   cut -f2 -d, < "uniprot-ids0.txt" \
+   | tail -n+2 \
+   | grep -v '^\$' \
+   > "uniprot-ids.txt"
    """
 
 }
@@ -174,18 +111,86 @@ process map_gene_names_from_file {
    publishDir( 
       "${params.outputs}/ppi", 
       mode: 'copy',
-      saveAs: { "${id}-${column}.txt" },
+      saveAs: { "${id}-${table.getSimpleName()}-${column}.txt" },
    )
 
    input:
-   tuple val( id ), path( filename ), val( column )
+   tuple val( id ), path( table )
+   val column
 
    output:
-   tuple val( id ), path( "uniprot-ids.txt" )
+   tuple val( id ), path( "named-ids.tsv" )
 
    script:
    """
-   
+   set -x
+
+   get_column_number () (
+      local col_name="\$1"
+      head -n1 | tr \$'\t' \$'\n' | grep -n "\$col_name" | cut -d: -f1
+   )
+
+   sort_table () (
+      local col_name="\$1"
+      local tempfile="aaaaaa"
+      cat > \$tempfile
+
+      col_number=\$(get_column_number "\$col_name" < \$tempfile)
+      head -n1 \$tempfile \
+      | cat - <(tail -n+2 \$tempfile | sort -k"\$col_number") \
+      && rm \$tempfile
+   )
+
+   bash ${projectDir}/bin/uniprot/uniprot-ids.sh \
+      "${table}" "${column}" \
+      "uniprot-ids0.txt" \
+      Gene_Name UniProtKB
+   sort_table "${column}" < uniprot-ids0.txt" \
+   > "uniprot-ids.txt"
+   join_col=\$(get_column_number "${column}" < "${table}")
+   join --header -1 "\$join_col" -2 1 \
+      <(sort_table "${column}" < "${table}") \
+      "uniprot-ids.txt" \
+   > "named-ids.tsv"
+   """
+
+   stub:
+   """
+
+   set -x
+
+   get_column_number () (
+      local col_name="\$1"
+      head -n1 | tr \$'\t' \$'\n' | grep -n "\$col_name" | cut -d: -f1
+   )
+
+   sort_table () (
+      local col_name="\$1"
+      local tempfile="aaaaaa"
+      cat > \$tempfile
+
+      col_number=\$(get_column_number "\$col_name" < \$tempfile)
+      head -n1 \$tempfile \
+      | cat - <(tail -n+2 \$tempfile | sort -k"\$col_number") \
+      && rm \$tempfile
+   )
+
+   cp ${projectDir}/data/559292-dca-stub.tsv input.tsv
+
+   bash ${projectDir}/bin/uniprot/uniprot-ids.sh \
+      input.tsv "${column}" \
+      "uniprot-ids0.txt" \
+      Gene_Name UniProtKB
+   sort_table "${column}" < "uniprot-ids0.txt" \
+   | sed 's/Gene_Name/${column}_gene_name/g' \
+   > "uniprot-ids.csv"
+   join_col=\$(get_column_number "${column}" < "input.tsv")
+   join --header -t \$'\t' \
+      -1 1 -2 "\$join_col"  \
+      <(tr , \$'\t' < "uniprot-ids.csv") \
+      <(sort_table "${column}" < "input.tsv") \
+   > "named-ids.tsv"
+
    """
 
 }

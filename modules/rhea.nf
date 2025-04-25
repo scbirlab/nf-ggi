@@ -2,6 +2,12 @@ process fetch_rhea_database {
 
     tag "${rhea_url}"
 
+    publishDir( 
+        "${params.outputs}/metabolites", 
+        mode: 'copy',
+        saveAs: { "_${it}" }
+    )
+
     input:
     val rhea_url
 
@@ -10,9 +16,10 @@ process fetch_rhea_database {
 
     script:
     """
-    wget ${rhea_url}/tsv/rhea2uniprot.tsv
-    wget ${rhea_url}/tsv/rhea2uniprot_trembl.tsv.gz
-    wget ${rhea_url}/tsv/rhea-reaction-smiles.tsv
+    for f in rhea2uniprot.tsv rhea2uniprot_trembl.tsv.gz rhea-reaction-smiles.tsv
+    do
+        wget ${rhea_url}/tsv/\$f
+    done
 
     tail -n+2 -q "rhea2uniprot.tsv" <(zcat rhea2uniprot_trembl.tsv.gz) \
     | sort -k4 \

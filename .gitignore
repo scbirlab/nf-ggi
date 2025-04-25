@@ -1,10 +1,12 @@
 .nextflow*
 /outputs/
 /work/
+/test/*-test/
 /test/*/outputs
 /test/*/work
 /test/*/*.html
 /test/*/slurm-*.out
+/test/work/
 ~$*.xlsx
 *.html
 *.requirements.txt

@@ -1,0 +1,3 @@
+method	ID	uniprot_id_1	uniprot_id_2	seq_len	chain_a_len	chain_b_len	msa1_depth	msa2_depth	msa_depth	n_eff	apc	mean	median	maximum	minimum
+dca	A0A023PXB5-P27825	A0A023PXB5	P27825	604	102	502	1	2078	1	1	True	nan	nan	nan	nan
+dca	A0A023PXB5-P33332	A0A023PXB5	P33332	1438	102	1336	1	50	1	1	True	nan	nan	nan	nan
