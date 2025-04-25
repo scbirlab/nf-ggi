@@ -28,12 +28,4 @@ jobs:
     - uses: nf-core/setup-nextflow@v1
     - name: Test Nextflow pipeline
       run: |
-        set -x
-        cd test
-        #>&2 echo "Disk space error issue!!!"
-        for d in */
-        do
-          cd $d
-          nextflow run ../.. -profile gh -stub && rm -r work
-          cd ..
-        done
+        bash run-tests.sh
