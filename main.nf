@@ -11,36 +11,66 @@
 
 nextflow.enable.dsl=2
 
+pipeline_title = """\
+   S C B I R   G E N E - G E N E   I N T E R A C T I O N   P R E D I C T I O N   P I P E L I N E
+   =============================================================================================
+   Nextflow pipeline to predict gene-gene interactions based on protein-protein interaction 
+   predictions and similar metabolites.
+   """
+   .stripIndent()
+
 /*
 ========================================================================================
    Help text
 ========================================================================================
 */
 if ( params.help ) {
-   println """\
-         S C B I R   G E N E - G E N E   I N T E R A C T I O N   P R E D I C T I O N   P I P E L I N E
-         =============================================================================================
-         Nextflow pipeline to predict gene-gene interactions based on protein-protein interaction 
-         predictions and similar metabolites.
-
-         Usage:
-            nextflow run scbirlab/nf-ggi --accession <acc number>
+   println pipeline_title + """\
+         Command-line usage:
+            nextflow run scbirlab/nf-ggi --uniclust <path> --bfd <path> --organism_id <taxon ID>
+            nextflow run scbirlab/nf-ggi --uniclust <path> --bfd <path> --organism_id <taxon ID> --bait <UniProtID>
+            nextflow run scbirlab/nf-ggi --uniclust <path> --bfd <path> --organism_id <taxon ID> --bait <taxon ID> --bait_is_taxon --interspecies
+            nextflow run scbirlab/nf-ggi --uniclust <path> --bfd <path> --organism_id <taxon ID> --filename <path> --column1 <gene-col1> --column2 <gene-col2> [--interspecies --organism_id2 <taxon ID>] [--format <gene-name-type>]
+         Config/sample sheet usage:
             nextflow run scbirlab/nf-ggi -c <config-file>
 
-         Required parameters:
-            sample_sheet         UniProt accession number for organism of interest.
-            uniclust, bfd        Paths to get HHblits databases.
+         Command-line required parameters:
+            --organism_id             Taxon ID for organism
+            Bait mode:
+               --bait                 UniProt ID for bait protein, or Taxon ID for bait organism
+            Custom mode:
+               --filename             Filename to get custom protein pairs
+               --column1, --column2   Column names from --filename to get protein IDs
 
-         Optional parameters (with defaults):  
+         Command-line optional parameters:
+            --bait_is_taxon  Indicate that bait is an organism ID
+            --interspecies   Run analysis between interacting species proteomes
+            --organism_id2   When providing a file of pairs, if the second protein (--column2) is from another organism than the first
+            --format         Type of gene identifier in --column1, --column2. Default: "Gene_Name"
+            --test           Whether to run in test mode. Default: false.
+            --outputs        Output folder. Default: "outputs".
+            --batch_size     What size to batch protein-protein interactions into. Default: 100.
+            --plots          Generate contact map plots
+
+         Config required parameters:
+            uniclust, bfd        Paths to get HHblits databases.
+            *and* either:
+               organism_id       Taxon ID for organism
+               (And all the same named flags above for command-line)
+            *or*
+               sample_sheet      CSV file with columns with same names as command-line flags, one row per combination to run
+               mode              "self" (all vs all), "bait" (all vs some), "custom" (some-vs-some)
+
+         Config optional parameters (with defaults):  
             test           Whether to run in test mode. Default: false.
-            non_self       Whether to run in non_self mode. Default: false.
-            bactch_size    What size to batch protein-protein interactions into. Default: 100.
+            batch_size     What size to batch protein-protein interactions into. Default: 100.
             rhea_url       URL to download Rhea reaction database. Default: "https://ftp.expasy.org/databases/rhea"
             outputs        Output folder. Default: "outputs".
 
          The parameters can be provided either in the `nextflow.config` file or on the `nextflow run` command.
    
-   """.stripIndent()
+   """
+   .stripIndent()
    exit 0
 }
 
@@ -50,7 +80,25 @@ if ( params.help ) {
 ========================================================================================
 */
 if ( !params.sample_sheet ) {
-   throw new Exception("!!! PARAMETER MISSING: Please provide a sample sheet including UniProt proteome ID for organism of interest.")
+   if ( !params.organism_id ) {
+      throw new Exception("!!! PARAMETER MISSING: Please provide a sample sheet or at least --organism_id.")
+   }
+   if ( params.filename ) {
+      if ( !params.format ) {
+         throw new Exception("!!! PARAMETER MISSING: Please provide a --format when using --filename.")
+
+      }
+      if ( !params.column1 ) {
+         throw new Exception("!!! PARAMETER MISSING: Please provide a --column1 when using --filename.")
+         
+      }
+      if ( !params.column2 ) {
+         throw new Exception("!!! PARAMETER MISSING: Please provide a --column2 when using --filename.")
+         
+      }
+      
+   }
+
 }
 if ( !params.uniclust ) {
    throw new Exception("!!! PARAMETER MISSING: Please provide a path to UniClust database.")
@@ -59,39 +107,28 @@ if ( !params.bfd ) {
    throw new Exception("!!! PARAMETER MISSING: Please provide a path to BFD database.")
 }
 
-working_dir = params.outputs
-
-sequences = "sequences"
-ppi = "ppi"
-metabi = "metabolites"
-coex = "coexpression"
-
-log.info """\
-         S C B I R   G E N E - G E N E   I N T E R A C T I O N   P R E D I C T I O N   P I P E L I N E
-         =============================================================================================
-         test mode               : ${params.test}
-         non-self mode           : ${params.non_self}
-         inputs
-            sample sheet         : ${params.sample_sheet}
-            UniClust database    : ${params.uniclust}
-            BFD                  : ${params.bfd}
-            Rhea                 : ${params.rhea_url}
-         batch size              : ${params.batch_size}
-         output                  : ${params.outputs}
-         """
-         .stripIndent()
-
-
-/*
-========================================================================================
-   Create Channels
-========================================================================================
-*/
-
-database_ch = Channel.of( tuple( params.uniclust, params.bfd ) )
-rhea_url_ch = Channel.of( params.rhea_url )
-sample_sheet_ch = Channel.fromPath( params.sample_sheet,
-                                    checkIfExists: true )
+log.info pipeline_title + """\
+   test mode               : ${params.test}
+   mode                    : ${params.mode}
+      Bait is Taxon ID     : ${params.bait_is_taxon}
+      Interspecies         : ${params.interspecies}
+   inputs
+      input_dir            : ${params.inputs}
+      sample sheet         : ${params.sample_sheet}
+      UniClust database    : ${params.uniclust}
+      BFD                  : ${params.bfd}
+      Rhea URL             : ${params.rhea_url}
+   batch size              : ${params.batch_size}
+   co-evolution analysis
+      Metabolites          : ${params.metabolites}
+      STRINGdb             : ${params.string}
+      DCA                  : ${params.dca}
+      RosettaFold-2track   : ${params.rf2t}           
+      AlphaFold2           : ${params.af2}              
+   output                  : ${params.outputs}
+      make plots?          : ${params.plots}
+   """
+   .stripIndent()
 
 
 /*
@@ -100,507 +137,424 @@ sample_sheet_ch = Channel.fromPath( params.sample_sheet,
 ========================================================================================
 */
 
+// load modules
+include {
+   make_msa_from_fasta;
+   make_msa_from_fasta as make_msa_from_fasta_bait;
+} from './modules/msa.nf'
+include {
+   fetch_rhea_database;
+   match_uniprot_to_reactants;
+} from './modules/rhea.nf'
+include {
+   fetch_string_database;
+} from './modules/string.nf'
+include { 
+   fetch_fastas_from_organism_id;
+   fetch_fastas_from_organism_id as fetch_fastas_from_organism_id_bait;
+   fetch_fasta_from_uniprot_id;
+   map_uniprot_ids_from_file;
+   map_uniprot_ids_from_file as map_uniprot_ids_from_file_bait;
+   map_gene_names_from_file as map_gene_names_from_file1;
+   map_gene_names_from_file as map_gene_names_from_file2;
+} from './modules/uniprot.nf'
+include {
+   run_dca;
+   run_rf2track;
+   run_af2;
+   stack_table as stack_dca;
+   stack_table as stack_rf2t;
+   stack_table as stack_af2;
+} from './modules/yunta.nf'
+// include { GENE_NAME_TO_UNIPROT as GENE_NAME_TO_UNIPROT } from './modules/uniprot.nf'
+
 workflow {
 
-   sample_sheet_ch
-      .splitCsv( header: true )
-      .map { params.non_self ? tuple( it.organism_id, it.proteome_name, it.bait ) : tuple( it.organism_id, it.proteome_name ) }
-      .set { sample_sheet }
-   sample_sheet
-      .map { it[0] }
-      .unique()
-      .map { sample -> [ "sequences", "msa", "ppi", 
-                         "coexpression", "metabolites" ].collect { "${params.outputs}/${sample}/${it}" } }
-      .subscribe { it.each { println "Creating output directory: ${it}" } }
-      .map { it.each { file( it ).mkdirs() } }
-   // Get FASTA sequences by UniProt ID, then split each sequence into a 
-   // single FASTA file.
-   sample_sheet.map { it[0] } | PULL_FASTA_SEQUENCES
-   PULL_FASTA_SEQUENCES.out
-      .splitFasta( elem: 1, record: [id: true, text: true] )
-      .set { fastas }
+   Channel.value( params.bfd ).set { bfd }
+   Channel.value( params.uniclust ).set { uniclust }
+   Channel.of( params.rhea_url ).set { rhea_url }
 
-   // If in test mode, only take 3 proteins, otherwise take all. 
-   // Then munge to extract IDs
-   ( params.test ? fastas.take(3) : fastas )
-      .map { tuple( it[0], it[1].id.split('\\|')[1], it[1].id.split('\\|')[2], it[1].text ) }  // Organism ID, UniProtID, Entry Name, FASTA text
-      .set { sample_fastas }
+   if ( params.sample_sheet ) {
 
-   if ( params.non_self ) {
-      sample_sheet.map { it[2] }      // Bait UniProtID
-         | PULL_BAIT_FASTA_SEQUENCES  // Bait UniProtID, FASTA file
-      sample_sheet
-         .map { tuple( it[2], it[0] ) }  // Bait UniProtID, Organism ID
-         .combine( PULL_BAIT_FASTA_SEQUENCES.out, 
-                   by: 0 )  // Bait UniProtID, Organism ID, FASTA file
-         .set { bait_fastas }
+      mode = params.mode
+
+      Channel.fromPath( 
+         params.sample_sheet,
+         checkIfExists: true, 
+      )
+         .splitCsv( header: true )
+         .set { sample_rows }
+
+   }
+
+   else {
+
+      Channel.of( [
+         organism_id: params.organism_id,
+         organism_id2: params.organism_id2,
+         bait: params.bait,
+         filename: params.filename,
+         format: params.format,
+         column1: params.column1,
+         column2: params.column2,
+      ] )
+      .set { sample_rows }
+
+      if ( params.bait ) {
+         mode = "bait"
+      }
+      else if ( params.filename ) {
+         mode = "custom"
+      }
+      else {
+         mode = "self"
+      }
+
    }
    
-   // Get reactants from Rhea database using UniProtIDs
-   rhea_url_ch | DOWNLOAD_RHEA_DB
-   DOWNLOAD_RHEA_DB.out.set { rhea_db }
-   sample_fastas
-      .collectFile( newLine: true ) { [ "${it[0]}.txt", "${it[1]}\t${it[2]}" ] }
-      .map { tuple( it.getSimpleName(), it ) }  // Organism ID, UniProtID list file
-      .combine( rhea_db ) // Organism ID, UniProtID list file, Rhea SMILES, Rhea2UniProt, Rhea2UniProt_Trembl
-      | GET_ENZYME_REACTANTS  // Organism ID, reaction SMILES file
-      | CONNECT_METABOLITES 
 
-   // Get STRING connections
-   sample_fastas
-      .map { it[0..1] }  // Organism ID, UniProtID
-      .collectFile( newLine: true ) { [ "${it[0]}.txt", it[1] ]}  // UniProtID list
-      .map { tuple( it.getSimpleName(), it ) }  // Organism ID, UniProtID list
-      | DOWNLOAD_STRING_DB
+   if ( mode == 'self' || mode == 'bait' ) {
 
-   // Get MSAs and cross them within each organism
-   sample_fastas
-      .collectFile( newLine: true ) { [ "${it[1]}.fasta", it[-1] ] }
-      .map { tuple( it.getSimpleName(), it )  }  // UniProtID, FASTA file
-      .set { fasta_files }
-   sample_fastas
-      .map { it[1..0] }  // UniProtID, Organism ID
-      .join( fasta_files, 
-            by: 0,
-            failOnMismatch: true, 
-            failOnDuplicate: true )  // UniProtID, Organism ID, FASTA file
-      .set { pre_msa }
+      sample_rows
+         .map { tuple( it.organism_id, it.organism_id ) }
+         .unique()
+         | fetch_fastas_from_organism_id  // Organism ID, FASTAs gz
+      fetch_fastas_from_organism_id.out
+         .splitFasta( elem: 1, record: [id: true, text: true] )  // Organism ID, FASTA text
+         .map { [ it[0] ] + it[1].id.split('\\|')[1..2] + [ it[1].text ] }  // Organism ID, UniProtID, Entry Name, FASTA text
+         .set { fastas_A0 }
 
-   if ( params.non_self ) {
-      pre_msa.concat( bait_fastas ).set { pre_msa }
-   }
+      ( params.test ? fastas_A0.take(3) : fastas_A0 )
+         .set { fastas_A }
 
-   pre_msa
-      .map { tuple( it[1], it[0], it[2] ) }  // Organism ID, UniProtID, FASTA file
-      .combine( database_ch )  // Organism ID, UniProtID, FASTA file, uniclust, bfd
-      | GET_MSA  // Organism ID, UniProtID, MSA file
+      if ( mode == 'self' ) {
+
+         fastas_A.set { fastas_B }
+
+      }
+
+      else {
+
+         sample_rows
+            .map { tuple( it.organism_id, it.bait ) }
+            .unique()
+            .set { baits }
+
+         if ( params.bait_is_taxon ) {
+
+            baits
+               | fetch_fastas_from_organism_id_bait  // Organism ID, bait FASTAs gz
+            fetch_fastas_from_organism_id_bait.out
+               .set { bait_fastas }
+
+         }
+
+         else {
+
+            baits
+               | fetch_fasta_from_uniprot_id  // Organism ID, bait FASTA file
+            fetch_fasta_from_uniprot_id.out
+               .set { bait_fastas }
    
-   if ( params.non_self ) {
-      sample_sheet_ch
-         .map { it[2] } // Bait Uniprot ID
-         .toList()      // [Bait Uniprot ID,...]
-         .set { bait_list }
-      GET_MSA.out
-         .filter { bait_list.contains( it[1] ) }
-         .set { counter_msas }
-   } else {
-      GET_MSA.out
-         .set { counter_msas }
+         }
+
+         bait_fastas  // Organism ID, bait FASTA file
+            .splitFasta( elem: 1, record: [id: true, text: true] )   // Organism ID, bait FASTA text
+            .map { 
+               [ it[0] ] + it[1].id.split('\\|')[1..2] + [ it[1].text ] 
+            }  // Organism ID, UniProtID, Entry Name, FASTA text
+            .set { fastas_B }
+         
+      }
+
    }
 
-   counter_msas
-      .map { tuple( it[0], it[2] ) }  // // Organism ID, MSA file
-      .groupTuple( by: 0, sort: { a, b -> a.getSimpleName() <=> b.getSimpleName() } )  // Organism ID, [MSA file, ...]
-      .map { tuple ( it[0], 
-                     it[1].withIndex().collect { el, i -> Math.round(Math.floor(i / params.batch_size)) },  // add batch index
-                     it[1] ) }  // Organism ID, [batch_i, ...], [MSA file, ...]
-      .transpose()  // Organism ID, batch_i, MSA file
-      .groupTuple( by: [0,1], sort: { a, b -> a.getSimpleName() <=> b.getSimpleName() } )  // Organism ID, batch_i, [MSA file, ...]
-      .set { msas_by_proteome }  
-   GET_MSA.out
-      .combine( msas_by_proteome, by: 0 )  // Organism ID, UniProtID, MSA file, batch_i, [MSA file, ...]
-      .map { a -> a[0..-2] + [ 
-         a[-1]
-         .sort { b, c -> b.getSimpleName() <=> c.getSimpleName() }
-         .takeWhile { it.getSimpleName() != a[2].getSimpleName() } 
-      ] }  // take lower triangle per proteome
-      .filter { it[-1].size() > 0 }  // filter out trivial (size-0) elements
-      .set { msas_to_process }  // Organism ID, UniProtID, MSA file, batch_i, [MSA file, ...]
+   else if ( mode == 'custom' ) {
 
-   // Calculate evolutionary coupling
-   msas_to_process | DIRECT_COUPLING_ANALYSIS 
+        sample_rows
+            .map { tuple(
+               tuple( 
+                  it.organism_id,
+                  ( params.interspecies ? it.organism_id2 : it.organism_id ),
+               ), 
+               file( 
+                  "${params.sample_sheet ? params.inputs : '.'}/${it.filename}", 
+                  checkIfExists: true,
+               ),
+               it.format,
+               it.column1,
+               it.column2,
+            ) }
+            .set { mapping_input }
+
+         mapping_input
+            .map { tuple( it[0][0], it[0][0], it[1], it[2], it[3] ) }
+            | map_uniprot_ids_from_file  // Organism ID, UniProtID A file
+         
+         mapping_input
+            .map { tuple( it[0][0], it[0][1], it[1], it[2], it[4] ) }
+            | map_uniprot_ids_from_file_bait  // Organism ID, UniProtID B file
+
+         map_uniprot_ids_from_file.out
+            .splitText( elem: 1 ) { v -> v.collect { it.toString().trim() } }
+            .set { uniprot_A0 }  // Organism ID, UniProtID A 
+         map_uniprot_ids_from_file_bait.out
+            .splitText( elem: 1 ) { v -> v.collect { it.toString().trim() } }
+            .set { uniprot_B0 }  // Organism ID, UniProtID B 
+
+         if ( params.test ) {
+            uniprot_A0.take(3).set { uniprot_A }
+            uniprot_B0.take(3).set { uniprot_B }
+         }
+
+         else {
+            uniprot_A0.set { uniprot_A }
+            uniprot_B0.set { uniprot_B }
+         }
+
+         uniprot_A
+            .map { tuple( it[0], it[1] ) }
+            .concat(
+               uniprot_B.map { tuple( it[0], it[1] ) }
+            )
+            .unique()
+            | fetch_fasta_from_uniprot_id   // Organism ID, FASTA file
+
+         fetch_fasta_from_uniprot_id.out
+            .splitFasta( elem: 1, record: [id: true, text: true] )   // Organism ID, bait FASTA text
+            .map { [ it[0] ] + it[1].id.split('\\|')[1..2] + [ it[1].text ] }  // Organism ID, UniProtID, Entry Name, FASTA text
+            .set { all_fasta_custom }
+         
+         all_fasta_custom
+            .combine( uniprot_A, by: [0, 1] )
+            .set { fastas_A }
+         all_fasta_custom
+            .combine( uniprot_B, by: [0, 1] )
+            .set { fastas_B }
+
+   }
+
+   else {
+      error "Unsupported mode: ${mode}. Choose from: organism, bait, custom."
+   }
 
    if ( params.test ) {
-      msas_to_process | RF2TRACK
-      msas_to_process | ALPHAFOLD2
+      fastas_A.take(2).set { fastas_A2 }
+      fastas_B.take(2).set { fastas_B2 }
    }
-   // ALPHAFOLD2.out
-   //           .map { it[2] }
-   //           .collect()
 
-}
-
-process PULL_FASTA_SEQUENCES {
-
-   tag "${organism_id}"
-
-   publishDir( "${params.outputs}/${organism_id}/sequences", 
-               mode: 'copy' )
-
-   input:
-   val organism_id
-
-   output:
-   tuple val( organism_id ), path( "*.fasta.gz" )
-
-   // TODO: filter only for representative proteome if no reference proteome
-   script:
-   """
-   function get_proteome_id() {
-      curl -s "https://rest.uniprot.org/proteomes/search?query=(taxonomy_id:${organism_id})&format=json" | jq '.results[] | select(.proteomeType == "'"\$1"' proteome").id'
+   else {
+      fastas_A.set { fastas_A2 }
+      fastas_B.set { fastas_B2 }
    }
-   QUERIES=("Reference and representative" "Reference" "Representative" "Other")
-   PROTEOME_ID=
-   for q in "\${QUERIES[@]}"
-   do
-      PROTEOME_ID=\$(get_proteome_id "\$q")
-      if [ ! -z \$PROTEOME_ID ]
-      then 
-         break
-      fi
-   done
 
-   wget "https://rest.uniprot.org/uniprotkb/stream?query=(proteome:\$PROTEOME_ID)&format=fasta&download=true&compressed=true" \
-      -O ${organism_id}.fasta.gz \
-      || (
-         echo "Failed to download taxonomy ID ${organism_id} with proteome ID \$PROTEOME_ID from UniProt"
-         exit 1   
+   fastas_A2
+      .concat( fastas_B2 ) // Organism ID, UniProtID, Entry Name, FASTA text
+      .unique()
+      .tap { all_fasta_info }
+      .map { it[1..0] }  // UniProtID, Organism ID 
+      .unique()
+      .set { id_to_uniprot_map }
+
+   if ( params.metabolites ) {
+      // Get reactants from Rhea database using UniProtIDs
+      fetch_rhea_database( rhea_url )
+      all_fasta_info  // Organism ID, UniProtID, Entry Name, FASTA text
+         .collectFile( newLine: true ) { [ "${it[0]}.txt", it[1] ] }
+         .map { tuple( it.getSimpleName(), it ) }  // Organism ID, UniProtID list file
+         .combine( fetch_rhea_database.out ) // Organism ID, UniProtID list file, Rhea SMILES, Rhea2UniProt
+         | match_uniprot_to_reactants  // Organism ID, reaction SMILES file
+         | CONNECT_METABOLITES 
+   }
+
+   if ( params.string ) {
+      // Get STRING connections
+      all_fasta_info  // Organism ID, UniProtID, Entry Name, FASTA text
+         .map { it[0..1] }  // Organism ID, UniProtID
+         .collectFile( newLine: true ) { [ "${it[0]}.txt", it[1] ] }  // UniProtID list
+         .map { tuple( it.getSimpleName(), it ) }  // Organism ID, UniProtID list
+         | fetch_string_database
+   }
+
+   all_fasta_info
+      .map { tuple( it[1], it[3] ) }  // UniProtID, FASTA text
+      .collectFile( newLine: true ) { [ "${it[0]}.fasta", "${it[1]}" ] }
+      .map { tuple( it.getSimpleName(), it ) }
+      .unique()
+      .set { input_for_making_msas }
+   make_msa_from_fasta(
+      input_for_making_msas,
+      uniclust,
+      bfd,
+   )
+   make_msa_from_fasta.out  // UniProtID, MSA
+      .combine(
+         id_to_uniprot_map,
+         by: 0,
+      )  // UniProtID, MSA, Organism ID 
+      .map { tuple( it[2], it[0], it[1] ) }  // Organism ID, UniProtID, MSA
+      .tap { all_msas }
+      .join(
+         fastas_A.map{ it[0..1] },
+         by: [0, 1],
+         failOnDuplicate: true,
+      )  // Organism ID, UniProtID, MSA
+      .set { msa_A }
+
+   all_msas
+      .join(
+         fastas_B2.map{ it[0..1] },
+         by: [0, 1],
+         failOnDuplicate: true,
+      )  // Organism ID, bait UniProtID, bait MSA
+      .set { msa_B }
+
+   msa_B  // Organism ID, Bait UniProt ID, Bait MSA
+      .combine(
+         msa_A,
+         by: 0
+      )  // Organism ID, Bait UniProt ID, Bait MSA, UniProtID, MSA
+      .set { crossed_msa } 
+
+   ( 
+      mode == 'self' 
+      ? crossed_msa.filter { it[1] < it[-2] } 
+      : crossed_msa.filter { it[1] != it[-2] } 
+   )  // If self-cross, only take lower triangle
+      .groupTuple( 
+         by: [0, 1, 2]
+      )  // Organism ID, Bait UniProt ID, Bait MSA, [UniProtID, ...], [MSA, ...]
+      .map { 
+         tuple(
+            it[0], it[1], it[2],
+            it[3].withIndex().collect { 
+               el, i -> Math.round(Math.floor(i / params.batch_size)) 
+            },
+            it[3], it[4]
+         ) 
+      }  // Organism ID, Bait UniProt ID, Bait MSA, [batch_i, ...], [UniProtID, ...], [MSA, ...]
+      .transpose()  // Organism ID, Bait UniProt ID, Bait MSA, batch_i, UniProtID, MSA
+      .groupTuple( 
+         by: [0, 1, 2, 3]
+      )  // Organism ID, Bait UniProt ID, Bait MSA, batch_i, [UniProtID, ...], [MSA, ...]
+      .filter { it[-1].size() > 0 }  // filter out trivial (size-0) elements
+      .set { msa_pairs0 }
+
+   if ( params.test ) {
+      msa_pairs0.take(2).set { msa_pairs }
+   }
+
+   else {
+      msa_pairs0.set { msa_pairs }
+   }
+
+   // Calculate evolutionary coupling
+   Channel.value( params.bait_is_taxon || params.interspecies ).set { interspecies }
+   Channel.value( params.plots ).set { make_coevo_plots }
+   if ( params.dca ) {
+      run_dca( 
+         msa_pairs, 
+         interspecies, 
+         make_coevo_plots,
       )
-   """
+      stack_dca(
+         run_dca.out.main
+            .groupTuple( by: 0 ),  // Organism ID, [tsv, ...]
+         Channel.value( "dca" )
+      ) // Organism ID, tsv
+         | set { stacked_dca }
+   }
 
-}
+   else {
 
+      Channel.empty() 
+         .set { stacked_dca }
 
-process PULL_BAIT_FASTA_SEQUENCES {
+   }
 
-   tag "${uniprot_id}"
-
-   publishDir( "${params.outputs}", 
-               mode: 'copy' )
-
-   input:
-   val uniprot_id
-
-   output:
-   tuple val( uniprot_id ), path( "*.fasta" )
-
-   script:
-   """
-   wget "https://rest.uniprot.org/uniprotkb/stream?query=(accession:${uniprot_id})&format=fasta&download=true&compressed=false" \
-      -O ${uniprot_id}.fasta \
-      || (
-         echo "Failed to download Uniprot ID ${uniprot_id} from UniProt"
-         exit 1   
+   if ( params.rf2t ) {
+      run_rf2track( 
+         msa_pairs, 
+         interspecies, 
+         make_coevo_plots,
       )
-   """
+      stack_rf2t(
+         run_rf2track.out.main
+            .groupTuple( by: 0 ),  // Organism ID, [tsv, ...]
+         Channel.value( "rf2t" )
+      )  // Organism ID, tsv
+         | set { stacked_rf2t }
+   }
 
-}
+   else {
 
+      Channel.empty() 
+         .set { stacked_rf2t }
 
-process DOWNLOAD_STRING_DB {
+   }
 
-   tag "${organism_id}"
-
-   publishDir( "${params.outputs}/${organism_id}/coexpression", 
-               mode: 'copy' )
-
-   input:
-   tuple val( organism_id ), path( uniprot_ids )
-
-   output:
-   tuple val( organism_id ), path( "*.string.tsv" )
-
-   script:
-   """
-   OUTFILE=${organism_id}.string0.tsv
-   printf 'string_id_1\\tstring_id_2\\tstring_cooccurence\\tstring_coexpression\\n' > \$OUTFILE
-   curl -s "https://stringdb-downloads.org/download/protein.links.full.v12.0/${organism_id}.protein.links.full.v12.0.txt.gz" \
-      | zcat \
-      | tail -n+2 \
-      | tr ' ' \$'\\t' \
-      | cut -f-2,6,8 \
-      >> \$OUTFILE \
-      || (
-         echo "Failed to download taxonomy ID ${organism_id} from STRING <https://stringdb-downloads.org>"
-         exit 1   
+   if ( params.af2 ) {
+      run_af2( 
+         msa_pairs, 
+         interspecies, 
+         make_coevo_plots,
       )
+      stack_af2(
+         run_af2.out.main
+            .groupTuple( by: 0 ),  // Organism ID, [tsv, ...]
+         Channel.value( "af2" )
+      )  // Organism ID, tsv
+         | set { stacked_af2 }
+   }
 
-   # Resolve UniProt IDs
-   printf 'uniprot_id_1\\tstring_id_1\\n' > ${organism_id}-string-lookup.tsv
-   cat ${uniprot_ids} | split -l 5 - uniprot-chunk_
-   for chunk in uniprot-chunk_*
-   do
-      
-      curl -s -X POST --data "species=${organism_id}&echo_query=1&identifiers="\$(awk -v ORS="%0d" '1' \$chunk) https://string-db.org/api/tsv-no-header/get_string_ids \
-         | cut -f1,3 \
-         >> ${organism_id}-string-lookup.tsv \
-         || (
-            echo "Failed to download UniProt lookup from STRING <https://string-db.org/api/tsv-no-header/get_string_ids>"
-            cat \$chunk
-            exit 1  
-         )
-      sleep 0.1
-   done
+   else {
 
-   python -c 'import pandas as pd; import sys; lookup = pd.read_csv("${organism_id}-string-lookup.tsv", sep="\\t"); renamer = dict(uniprot_id_1="uniprot_id_2", string_id_1="string_id_2"); pd.read_csv("${organism_id}.string0.tsv", sep="\\t").assign(organism_id="${organism_id}").merge(lookup).merge(lookup.rename(columns=renamer)).to_csv(sys.stdout, sep="\\t", index=False)' \
-      > ${organism_id}.string.tsv
-   """
+      Channel.empty() 
+         .set { stacked_af2 }
+
+   }
+
+   stacked_dca
+      .concat(
+         stacked_rf2t,
+         stacked_af2,
+      )
+      .set { ppi_outputs }
+   map_gene_names_from_file1(
+      ppi_outputs,
+      Channel.value( "uniprot_id_1" )
+   )
+   map_gene_names_from_file2(
+      map_gene_names_from_file1.out,
+      Channel.value( "uniprot_id_2" )
+   )
 
 }
-
-
-process DOWNLOAD_RHEA_DB {
-
-   tag "${rhea_url}"
-
-   input:
-   val rhea_url
-
-   output:
-   tuple path( "rhea-reaction-smiles.tsv" ), path( "rhea2uniprot.tsv" ), path( "rhea2uniprot_trembl.tsv.gz" )
-
-   script:
-   """
-   wget ${rhea_url}/tsv/rhea2uniprot.tsv
-   wget ${rhea_url}/tsv/rhea2uniprot_trembl.tsv.gz
-   wget ${rhea_url}/tsv/rhea-reaction-smiles.tsv
-   """
-}
-
-
-process GET_ENZYME_REACTANTS {
-
-   tag "${organism_id}"
-
-   publishDir( "${params.outputs}/${organism_id}/metabolites", 
-               mode: 'copy' )
-
-   input:
-   tuple val( organism_id ), path( uniprot_ids ), path( rhea_smiles ), path( rhea2uniprot ), path( rhea2uniprot_tr )
-
-   output:
-   tuple val( organism_id ), path( "*.rxn-smiles.tsv" )
-
-   script:
-   """
-   OUTFILE=${organism_id}.rxn-smiles.tsv
-   join -t\$'\\t' -1 4 -2 1 <(tail -n+2 -q "${rhea2uniprot}" <(zcat ${rhea2uniprot_tr}) | sort -k4) <(sort -k1 "${uniprot_ids}") \
-      | awk -v OFS='\\t' '\$3=="UN"{ \$2++; print \$0; \$2++; print \$0 }; \$3!="UN"' \
-      | sort -k2 \
-      | join -t\$'\\t' -1 2 -2 1 - <(sort -k1 "${rhea_smiles}") \
-      > rxn-smiles0.tsv
-
-   cat <(printf 'organism_id\\trhea_reaction_id\\tuniprot_id\\tdirection\\trhea_master_reaction_id\\tentry_name\\treaction_smiles\\treactants\\tproducts\\n') \
-      <(paste rxn-smiles0.tsv \
-         <(cat rxn-smiles0.tsv | cut -f6 | awk -F '>>' -v OFS=\$'\t' '{ print \$1,\$2 }') \
-         | awk -v OFS='\\t' '{ print "${organism_id}",\$0 }') \
-      > \$OUTFILE
-
-   if [ \$(cat \$OUTFILE | wc -l) -gt 1 ]
-   then 
-      exit 0
-   else
-      >&2 echo "No entries in reaction file: \$OUTFILE."
-      exit 1
-   fi
-   """
-}
-
 
 process CONNECT_METABOLITES {
 
-   tag "${organism_id}"
+   tag "${id}"
    label "big_time"
 
-   publishDir( "${params.outputs}/${organism_id}/metabolites", 
-               mode: 'copy' )
+   publishDir( 
+      "${params.outputs}/metabolites", 
+      mode: 'copy',
+      saveAs: { "${id}.metabolism-connection.tsv" }
+   )
 
    input:
-   tuple val( organism_id ), path( reaction_table )
+   tuple val( id ), path( reaction_table )
 
    output:
-   tuple val( organism_id ), path( "*.metabolism-connection.tsv" )
+   tuple val( id ), path( "metabolism-connection.tsv" )
 
    script:
    """
-   cat ${reaction_table} | python ${projectDir}/bin/metabolism/connect-metabolites.py > ${organism_id}.metabolism-connection.tsv
+   python ${projectDir}/bin/metabolism/connect-metabolites.py \
+   < "${reaction_table}" \
+   > metabolism-connection.tsv
    """
 }
-
-
-process GET_MSA {
-
-   tag "${organism_id} : ${uniprot_id}"
-   label 'big_cpu'
-   errorStrategy 'retry'
-   maxRetries 2
-
-   publishDir( "${params.outputs}/${organism_id}/msa", 
-               mode: 'copy' )
-
-   // Proteome ID, UniProtID, FASTA file, uniclust, bfd
-   input:
-   tuple val( organism_id ), val( uniprot_id ), file( fasta ), val( uniclust ), val( bfd )
-
-   output:
-   tuple val( organism_id ), val( uniprot_id ), path( "${organism_id}-${uniprot_id}.a3m" )
-
-   script:
-   """
-   set -x
-   dbs=(${uniclust} ${bfd})
-   for d in \${dbs[@]}
-   do
-   hhblits \
-      -cpu ${task.cpus} \
-      -maxmem ${task.memory.getGiga()} \
-      -v 2 \
-      -i "${fasta}" \
-      -d \$d \
-      -e 0.001 \
-      -o /dev/null \
-      -oa3m "\$(basename \$d).a3m" \
-      -cov 60 \
-      -n 3 \
-      -realign -realign_max 10000
-   done
-
-   outputs=( *.a3m )
-   cat <(head -n2 \${outputs[0]}) <(tail -n+3 -q \${outputs[@]}) \
-      > "${organism_id}-${uniprot_id}.a3m"
-   for f in \${outputs[@]}
-   do
-      if [ \$f != "${organism_id}-${uniprot_id}.a3m" ]
-      then
-         rm \$f
-      fi
-   done
-   """
-
-   stub:
-   """
-   head -n2 ${fasta} > "${organism_id}-${uniprot_id}.a3m"
-   """
-}
-
-
-process DIRECT_COUPLING_ANALYSIS {
-
-   label 'big_time'
-   tag "${uniprot_id}-batch_${batch_idx}"
-   stageInMode 'link'
-   errorStrategy 'retry'
-   maxRetries 2
-
-   publishDir( "${params.outputs}/${organism_id}/ppi", 
-               mode: 'copy' )
-
-   // Proteome ID, UniProtID, MSA file, [MSA file, ...]
-   input:
-   tuple val( organism_id ), val( uniprot_id ), path( msa1, stageAs: "ref/ref.a3m" ), val( batch_idx ), path( msa2 )
-
-   output:
-   tuple val( organism_id ), val( uniprot_id ), path( "*-batch*_dca.tsv" ), emit: main
-   path "*-batch*_dca" , emit: plots
-
-   script:
-   """
-   MSA_LIST=msa-list.txt
-   for item in *.a3m
-   do
-      echo "\$item" >> \$MSA_LIST
-   done
-   yunta dca-single \
-      <(echo "ref/ref.a3m") \
-      --msa2 \$MSA_LIST \
-      --list-file \
-      --apc \
-      --output "${organism_id}-${uniprot_id}-batch_${batch_idx}_dca.tsv" \
-      --plot "${organism_id}-${uniprot_id}-batch_${batch_idx}_dca"
-   """
-}
-
-process RF2TRACK {
-
-   label 'big_time'
-   tag "${uniprot_id}-batch_${batch_idx}"
-   stageInMode 'link'
-   errorStrategy 'retry'
-   maxRetries 2
-
-   publishDir( "${params.outputs}/${organism_id}/ppi", 
-               mode: 'copy' )
-
-   // Proteome ID, UniProtID, MSA file, [MSA file, ...]
-   input:
-   tuple val( organism_id ), val( uniprot_id ), path( msa1, stageAs: "ref/ref.a3m" ), val( batch_idx ), path( msa2 )
-
-   output:
-   tuple val( organism_id ), val( uniprot_id ), path( "*-batch_*.tsv" ), emit: main
-   path "*-batch*_rf2t", emit: plots
-
-   script:
-   """
-   MSA_LIST=msa-list.txt
-   for item in *.a3m
-   do
-      echo "\$item" >> \$MSA_LIST
-   done
-   PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True yunta rf2t-single \
-      <(echo "ref/ref.a3m") \
-      --msa2 \$MSA_LIST \
-      --list-file \
-      --output "${organism_id}-${uniprot_id}-batch_${batch_idx}_rf2t.tsv" \
-      --plot "${organism_id}-${uniprot_id}-batch_${batch_idx}_rf2t"
-   """
-
-   stub:
-   """
-   mkdir "${organism_id}-${uniprot_id}-batch_${batch_idx}_rf2t.tsv"
-   touch "${organism_id}-${uniprot_id}-batch_${batch_idx}_af2/plot.png"
-   echo "Skipping RF2t for stub"
-   """
-}
-
-
-process ALPHAFOLD2 {
-
-   label 'gpu'
-   tag "${uniprot_id}-batch_${batch_idx}"
-   stageInMode 'link'
-   errorStrategy 'retry'
-   maxRetries 2
-
-   publishDir( "${params.outputs}/${organism_id}/ppi", 
-               mode: 'copy' )
-
-   input:
-   tuple val( organism_id ), val( uniprot_id ), path( msa1, stageAs: "ref/ref.a3m" ), val( batch_idx ), path( msa2 )
-
-   output:
-   tuple val( organism_id ), val( uniprot_id ), path( "*-batch_*_af2" ), emit: main
-   path "*-batch_*_af2/*.pdb", emit: pdb
-
-   script:
-   """
-   MSA_LIST=msa-list.txt
-   for item in *.a3m
-   do
-      echo "\$item" >> \$MSA_LIST
-   done
-   export CUDNN_PATH=\$(dirname \$(python -c "import nvidia.cudnn; print(nvidia.cudnn.__file__)"))
-   export LD_LIBRARY_PATH=\${CUDNN_PATH}/lib
-   >&2 echo "CuDNN path at" \$CUDNN_PATH "contains:"  # should exist and give a good path
-   >&2 echo \$(ls \$CUDNN_PATH)                       # should contain stuff like a lib subdir with libcudnn .so files
-   >&2 echo "LD library path at" \$LD_LIBRARY_PATH    # should exist and contain CUDNN_PATH
-   >&2 echo "\$(nvcc --version)"
-   >&2 python3 -c "import tensorflow as tf; print(f'Available devices:\\n{tf.config.list_physical_devices()}')"
-   XLA_PYTHON_CLIENT_MEM_FRACTION=.9 yunta af2-single \
-      <(echo "ref/ref.a3m") \
-      --msa2 \$MSA_LIST \
-      --list-file \
-      --output "${organism_id}-${uniprot_id}-batch_${batch_idx}_af2" \
-      --plot "${organism_id}-${uniprot_id}-batch_${batch_idx}_af2"
-   """
-
-   stub:
-   """
-   mkdir "${organism_id}-${uniprot_id}-batch_${batch_idx}_af2"
-   touch "${organism_id}-${uniprot_id}-batch_${batch_idx}_af2/stub.pdb"
-   echo "Skipping AF2 for stub"
-   """
-}
-
 
 /*
 ========================================================================================

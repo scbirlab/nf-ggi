@@ -4,7 +4,8 @@
 [![Nextflow](https://img.shields.io/badge/nextflow%20DSL2-%E2%89%A523.10.0-23aa62.svg)](https://www.nextflow.io/)
 [![run with conda](https://img.shields.io/badge/run%20with-conda-3EB049?labelColor=000000&logo=anaconda)](https://docs.conda.io/en/latest/)
 
-**scbirlab/nf-ggi** is a Nextflow pipeline to screen gene-gene interactions from a specified organism (or set of organisms). 
+**scbirlab/nf-ggi** is a Nextflow pipeline to screen gene-gene interactions within an organism or between organisms 
+(in the case of host-pathogen or phage-bacterium interactions).
 
 **Table of contents**
 
@@ -19,36 +20,49 @@
 
 ## Processing steps
 
-1. Download Rhea DB in preparation for searching.
+1. Download Rhea DB (of metabolites) in preparation for searching.
 
-For each organism ID provided:
+For proteins or proteomes in the [sample sheet](#sample-sheet):
 
-1. Download its STRING database and tidy data.
-2. Download FASTA sequences of its proteins from UniProt
-    - Where possible, reference proteomes are used.
+1. Download its STRING database and tidy up the data.
+2. Download FASTA sequences of proteins from UniProt
+    - If multiple proteomes are available, choose according to this priority: "Reference and representative", "Reference", "Representative", "Other"
 3. Find reactions in Rhea DB and connect products with reactants between enzymes in the proteome.
 
-For each FASTA sequence in each organism:
+For each FASTA sequence:
 
 4. Generate a multiple sequence alignment with `hhblits`.
 
-Then within each organism:
+For `method == "self"`:
 
-5. Generate all unique pairs of proteins.
+5. Within each organism, generate all unique pairs of proteins.
 
-Then for each protein pair:
+For `method == "bait"`:
 
-6. Calculate the co-evolutionary signal with DCA.
-7. Predict the interface contact map with `yunta rf2t` (RosettaFold-2track).
-8. Predict the protein-protein complex structure map with `yunta af2` (AlphaFold2).
+5. All unique pairs of proteins between the organism and listed baits.
+
+For `method == "custom"`:
+
+5. All unique pairs of proteins listed.
+
+Then for each protein pair, optionally:
+
+6. Calculate the co-evolutionary signal with DCA, optionally generating plots of contact maps.
+7. Predict the interface contact map with `yunta rf2t` (RosettaFold-2track), optionally generating plots of contact maps.
+8. Predict the protein-protein complex structure map with `yunta af2` (AlphaFold2), optionally generating plots of contact maps.
 
 ## Requirements
 
+You need access to the UniClust and BFD databases, and you need Nextflow and conda to be installed.
+
 ### Databases
 
-To generate multiple-sequence alignments (MSAs) for co-evolutionary analysis, `hhblits` databases of pre-clustered sequences is required. Unfortunately, these are extremely large, so cannot be downlaoded as part of the pipeline. You should download the [UniClust](https://uniclust.mmseqs.com/) and [BFD](https://bfd.mmseqs.com/) databases, then set the `--uniclust` and `--bfd` parameters of the pipeline ([see below](#inputs)).
+To generate multiple-sequence alignments (MSAs) for co-evolutionary analysis, `hhblits` databases of 
+pre-clustered sequences is required. Unfortunately, these are extremely large, so cannot be downlaoded as 
+part of the pipeline. You should download the [UniClust](https://uniclust.mmseqs.com/) and [BFD](https://bfd.mmseqs.com/) 
+databases, then set the `--uniclust` and `--bfd` parameters of the pipeline ([see below](#inputs)).
 
-If you're at the Crick, these databases already reside on NEMO.
+If you're at the Crick, these databases already reside on NEMO, and there is no need to downlaod them.
 
 ### Software
 
@@ -56,11 +70,15 @@ You need to have Nextflow and `conda` installed on your system.
 
 #### First time using Nextflow?
 
-If you're at the Crick or your shared cluster has it already installed, try:
+##### Crick users
+
+If you're at the Crick **or your shared cluster has it already installed**, try:
 
 ```bash
 module load Nextflow
 ```
+
+##### Others
 
 Otherwise, if it's your first time using Nextflow on your system, you can install it using `conda`:
 
@@ -85,89 +103,185 @@ source ~/.bash_profile
 
 ## Quick start
 
-Make a [sample sheet (see below)](#sample-sheet) and, optionally, a [`nextflow.config` file](#inputs) in the directory where you want the pipeline to run. Then run Nextflow.
+There are three run modes for the pipeline:
 
-```bash 
-nextflow run scbirlab/nf-ont-call-variants
+- "self": run all protein-protein interactions within an organism
+- "bait": run interactions between all proteins from an organism and either one protein or another organism's proteome
+- "custom": run specified protein pairs from a file
+
+The easiest way to get going is by specifying parameters on the command-line:
+
+```bash
+bfd=path/to/your/bfd
+uniclust=path/to/your/uniclust
+nextflow run scbirlab/nf-ggi --bfd "$bfd" --uniclust "$uniclust" --organism_id 243273 --dca --rf2t  --plots
 ```
 
-Each time you run the pipeline after the first time, Nextflow will use a locally-cached version which will not be automatically updated. If you want to ensure that you're using the very latest version of the pipeline, use the `-latest` flag.
+Here's what the flags mean:
+-  `--organism_id`: The Taxon ID of the organism, whih you can find at NCBI or UniProt
+- `--dca`, `--rf2t`: Run direct-coupling analysis and RosettaFold-2track
+- `--plots`: Generate amino acid contact maps. This takes about 10MB per protein-protein interaction, so be sure you have enough disk space!
+
+You could also run `--metabolites` to get the metabolic network, and `--string` to get the STRING co-expression network.
+
+Because only `--organism_id` is provided, the pipeline assumes "self" mode (i.e. all-vs-all within taxon 243273).
+
+You can run bait mode by providing `--bait <UniProt ID>`:
+
+```bash
+nextflow run scbirlab/nf-ggi --bfd "$bfd" --uniclust "$uniclust" --organism_id 559292 --bait P00931 --dca
+```
+
+The bait can be another organisms's proteome. In this case, we need to specifiy that `--bait_is_taxon` and `--interspecies`:
+
+```bash
+nextflow run scbirlab/nf-ggi --bfd "$bfd" --uniclust "$uniclust" --organism_id 559292 --bait 1773 --bait_is_taxon --interspecies --rf2t
+```
+
+### Running more than one query in parallel
+
+Make a [sample sheet (see below)](#sample-sheet) with columns representing the flags above, and, optionally, a [`nextflow.config` file](#inputs) in the 
+directory where you want the pipeline to run. Then simply run:
 
 ```bash 
-nextflow run scbirlab/nf-ont-call-variants -latest
+nextflow run scbirlab/nf-ggi
 ```
+
+### Pipeline versions
+
+Each time you run the pipeline after the first time, Nextflow will use a locally-cached version which 
+will not be automatically updated. If you want to ensure that you're using the very latest version of the 
+pipeline, use the `-latest` flag.
+
+```bash 
+nextflow run scbirlab/nf-ggi -latest
+```
+
 If you want to run a particular tagged version of the pipeline, such as `v0.0.1`, you can do so using
 
 ```bash 
-nextflow run scbirlab/nf-ont-call-variants -r v0.0.2
+nextflow run scbirlab/nf-ggi -r v0.0.1
 ```
 
-For help, use `nextflow run scbirlab/nf-ont-call-variants --help`.
+For help, use `nextflow run scbirlab/nf-ggi --help`.
 
-The first time you run the pipeline on your system, the software dependencies in `environment.yml` will be installed. This may take several minutes.
+The first time you run the pipeline on your system, the software dependencies in `environment.yml` will be installed. 
+This may take several minutes.
 
 ## Inputs
 
-The following parameters are required:
+### Command-line usage
 
-- `sample_sheet`: path to a CSV with information about the samples and FASTQ files to be processed
-- `uniclust`: Path to `hhblits` UniClust database. This is very large, so you need to have it already downlaoded on your system.
-- `bfd`: Path to `hhblits` BFD database. This is very large, so you need to have it already downlaoded on your system.
-
-The following parameters have default values which can be overridden if necessary.
-
- - `rhea_url = "https://ftp.expasy.org/databases/rhea"`: URL to download Rhea reaction database
- - `outputs = "outputs"`: Output folder
- - `batch_size = 100`: How many protein-protein interactions to group into one job at a time.
- - `test = false`: Whether to run in test mode. If so, only 3 proteins per organism will be analyzed.
- - `non_self = false`: Whether to run in non-self mode. This is where a whole proteome is run against a single bait protein (rather than all pairwise from the proteome).
-
-The parameters can be provided either in the `nextflow.config` file or on the `nextflow run` command.
-
-Here is an example of the `nextflow.config` file:
-
-```nextflow
-params {
-    sample_sheet = "/path/to/sample-sheet.csv"
-}
-```
-
-Alternatively, you can provide the parameters on the command line:
+The pipeline can be run with command-line arguments:
 
 ```bash
-nextflow run scbirlab/nf-ggi --sample_sheet /path/to/sample-sheet.csv 
-``` 
+nextflow run scbirlab/nf-ggi --uniclust <path> --bfd <path> --organism_id <taxon ID>
+nextflow run scbirlab/nf-ggi --uniclust <path> --bfd <path> --organism_id <taxon ID> --bait <UniProtID>
+nextflow run scbirlab/nf-ggi --uniclust <path> --bfd <path> --organism_id <taxon ID> --bait <taxon ID> --bait_is_taxon --interspecies
+nextflow run scbirlab/nf-ggi --uniclust <path> --bfd <path> --organism_id <taxon ID> --filename <path> --column1 <gene-col1> --column2 <gene-col2> [--interspecies --organism_id2 <taxon ID>] [--format <gene-name-type>]
+```
+
+The following parameters are **required**:
+
+```
+--organism_id             Taxon ID for organism
+Bait mode:
+    --bait                 UniProt ID for bait protein, or Taxon ID for bait organism
+Custom mode:
+    --filename             Filename to get custom protein pairs
+    --column1, --column2   Column names from --filename to get protein IDs
+```
+
+The following parameters are **optional**. They have default values which can
+ be overridden if necessary.
+
+ ```bash
+--bait_is_taxon  Indicate that bait is an organism ID
+--interspecies   Run analysis between interacting species proteomes
+--plots          Generate contact map plots
+--organism_id2   When providing a file of pairs, if the second protein (--column2) is from another organism than the first
+--format         Type of gene identifier in --column1, --column2. Default: "Gene_Name"
+--test           Whether to run in test mode. Default: false.
+--outputs        Output folder. Default: "outputs".
+--batch_size     What size to batch protein-protein interactions into. Default: 100.
+```
 
 ### Sample sheet
 
-The sample sheet is a **CSV** file indicating which organisms you want to analyze.
+You can run multiple combinations in one command using a sample sheet. The sample sheet is a **CSV** file with one row per combination of parameters to run. The column headings have the same names as the required flags for command-line usage. The optional flags are still on the command line, and applied to everything in the run. Here, the mode needs to be specified with `--mode`:
 
-The file must have a header with the column names below, and one line per organism to be processed.
+```bash
+nextflow run scbirlab/nf-ggi --mode self --rf2t --metabolites --sample_sheet path/to/sample-sheet.csv
+```
 
-- `organism_id`: the NCBI Taxonomic ID for your organism. This can be found at [NCBI Taxonomy](https://www.ncbi.nlm.nih.gov/taxonomy)
-- `proteome_name`: This can be anything, but should be an informative description
+#### Sample sheet structure
 
-Here is an example of the sample sheet:
+Here is an example of the sample sheet for `mode = "self"`, to find all the mycoplasma protein-protein interactions:
 
 | organism_id | proteome_name           |
 | ----------- | ----------------------- |
 | 243273      | "Mycoplasma genitalium" |
 
-If running with `--non-self`, to do a pulldown against a single bait protein, add another column with the bait UniProt ID.
+The `proteome_name` column is not neccesary, but you can add extra columns with human-readable annotations for your own sanity. We recommend:
+- `proteome_name`
+- (if using a bait) `bait_name`
 
-| organism_id | proteome_name           | bait   |
-| ----------- | ----------------------- | ------ |
-| 243273      | "Mycoplasma genitalium" | P47259 |
+If running with `mode = "bait"`, to do a pulldown against a single bait protein, add another column with the bait UniProt ID.
+
+| organism_id | proteome_name           | bait   | bait_name |
+| ----------- | ----------------------- | ------ | --------- |
+| 243273      | "Mycoplasma genitalium" | P47259 | FolD      |
+
+
+If running with `mode = "custom"`, to do a pulldown against a single bait protein, add another column with the bait UniProt ID.
+
+| organism_id | proteome_name              | format    | filename  | column1 | column2 |
+| ----------- | -------------------------- | --------- | --------- | -------- | -------- |
+| 559292      | "Saccharomyces cerevisiae" | Gene_Name | combos.csv | query_orf | array_orf |
+
+In this case, `combos.csv` must be in the `inputs` folder defined above. It would look like:
+
+| query_orf	| query_gene_name | array_orf | array_gene_name |
+| --------- | --------------- | --------- | --------------- |
+| YAL058W	| CNE1            | YAL068C   |	PAU8            |
+
+Further examples are in the `test` directory of this repository.
+
+
+### Config-file usage (recommended)
+
+For reproducibility, self-documentation, and to save typing, parameters with the same names as the command line flags above can be provided in a `nextflow.config` file in the working directory. For example:
+
+```groovy
+params {
+    organism_id = "243273"
+    dca = true
+    rf2t = true
+}
+```
+
+Or with a sample sheet:
+
+```groovy
+params {
+    sample_sheet = "path/to/sample-sheet.csv"
+    mode = "self"
+    dca = true
+    rf2t = true
+    metabolites = true
+    string = true
+}
+```
 
 ## Outputs
 
-Outputs are saved in the same directory as `sample_sheet`. They are organised under three directories:
+Outputs are saved in the `output` folder defined above. They include these directories:
 
-- `coexpression`: STRING co-expression values
+- `string`: STRING co-expression values
 - `metabolites`: Reconstructed metabolic network
 - `msa`: All MSA files
 - `ppi`: All protein-protein interaction data
-- `sequences`: Each organism's proteome sequence
+- `sequences`: Protein sequences
 
 ## Credit
 
@@ -177,7 +291,7 @@ The idea of using DCA, [RoseTTAFold](https://github.com/RosettaCommons/RoseTTAFo
 - [Humpreys et al., Computed structures of core eukaryotic protein complexes. _Science_, 2021](https://doi.org/10.1126/science.abm4805)
 - [Humpreys et al., Protein interactions in human pathogens revealed through deep learning. _Nature Microbiology_, 2024](https://doi.org/10.1038/s41564-024-01791-x)
 
-`scbirlab/nf-ggi` applies these algorithms in a Nextflow pipeline to allow easy scaling. It also reconstructs metabolic networks, and pulls known interactions from the STRING database.
+`scbirlab/nf-ggi` applies these algorithms in a Nextflow pipeline to allow easy scaling, and enables inter-species interactions. It also reconstructs metabolic networks, and pulls known interactions from the STRING database.
 
 ## Issues, problems, suggestions
 
