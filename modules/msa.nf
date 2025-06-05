@@ -2,8 +2,10 @@ process make_msa_from_fasta {
 
    tag "${id}"
    label 'big_cpu'
-   // errorStrategy 'retry'
-   // maxRetries 2
+   time '7d'
+   memory '64G'
+   errorStrategy 'retry'
+   maxRetries 2
 
    publishDir( 
       "${params.outputs}/msa", 

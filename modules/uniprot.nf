@@ -145,12 +145,13 @@ process map_gene_names_from_file {
       "${table}" "${column}" \
       "uniprot-ids0.txt" \
       Gene_Name UniProtKB
-   sort_table "${column}" < uniprot-ids0.txt" \
+   sort_table "${column}" < "uniprot-ids0.txt" \
    > "uniprot-ids.txt"
    join_col=\$(get_column_number "${column}" < "${table}")
-   join --header -1 "\$join_col" -2 1 \
+   join --header -t \$'\t' \
+      -1 1 -2 "\$join_col"  \
+      <(tr , \$'\t' < "uniprot-ids.csv") \
       <(sort_table "${column}" < "${table}") \
-      "uniprot-ids.txt" \
    > "named-ids.tsv"
    """
 

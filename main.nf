@@ -422,7 +422,8 @@ workflow {
       : crossed_msa.filter { it[1] != it[-2] } 
    )  // If self-cross, only take lower triangle
       .groupTuple( 
-         by: [0, 1, 2]
+         by: [0, 1, 2],
+         sort: true,
       )  // Organism ID, Bait UniProt ID, Bait MSA, [UniProtID, ...], [MSA, ...]
       .map { 
          tuple(
@@ -435,7 +436,8 @@ workflow {
       }  // Organism ID, Bait UniProt ID, Bait MSA, [batch_i, ...], [UniProtID, ...], [MSA, ...]
       .transpose()  // Organism ID, Bait UniProt ID, Bait MSA, batch_i, UniProtID, MSA
       .groupTuple( 
-         by: [0, 1, 2, 3]
+         by: [0, 1, 2, 3],
+         sort: true,
       )  // Organism ID, Bait UniProt ID, Bait MSA, batch_i, [UniProtID, ...], [MSA, ...]
       .filter { it[-1].size() > 0 }  // filter out trivial (size-0) elements
       .set { msa_pairs0 }
@@ -459,7 +461,10 @@ workflow {
       )
       stack_dca(
          run_dca.out.main
-            .groupTuple( by: 0 ),  // Organism ID, [tsv, ...]
+            .groupTuple( 
+               by: 0,
+               sort: true,
+          ),  // Organism ID, [tsv, ...]
          Channel.value( "dca" )
       ) // Organism ID, tsv
          | set { stacked_dca }
@@ -480,7 +485,10 @@ workflow {
       )
       stack_rf2t(
          run_rf2track.out.main
-            .groupTuple( by: 0 ),  // Organism ID, [tsv, ...]
+            .groupTuple( 
+               by: 0,
+               sort: true,
+            ),  // Organism ID, [tsv, ...]
          Channel.value( "rf2t" )
       )  // Organism ID, tsv
          | set { stacked_rf2t }
@@ -501,7 +509,10 @@ workflow {
       )
       stack_af2(
          run_af2.out.main
-            .groupTuple( by: 0 ),  // Organism ID, [tsv, ...]
+            .groupTuple( 
+               by: 0,
+               sort: true,
+            ),  // Organism ID, [tsv, ...]
          Channel.value( "af2" )
       )  // Organism ID, tsv
          | set { stacked_af2 }

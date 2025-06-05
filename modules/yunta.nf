@@ -3,8 +3,8 @@ process run_dca {
    label 'big_time'
    tag "${id}-${uniprot_id_bait}:${batch_idx}"
    stageInMode 'link'
-   // errorStrategy 'retry'
-   // maxRetries 2
+   errorStrategy 'retry'
+   maxRetries 2
 
    publishDir( 
       "${params.outputs}/dca", 
@@ -64,8 +64,8 @@ process run_rf2track {
    label 'gpu_single'
    tag "${id}-${uniprot_id_bait}:${batch_idx}"
    stageInMode 'link'
-   // errorStrategy 'retry'
-   // maxRetries 2
+   errorStrategy 'retry'
+   maxRetries 2
 
    publishDir( 
       "${params.outputs}/rf2t", 
