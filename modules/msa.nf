@@ -1,9 +1,8 @@
 process make_msa_from_fasta {
 
    tag "${id}"
-   label 'big_cpu'
-   time '7d'
-   memory '64G'
+   label 'big_cpu_mem'
+   
    errorStrategy 'retry'
    maxRetries 2
 
