@@ -7,7 +7,7 @@ GITHUB=${1:-no}
 if [ "$GITHUB" == "gh" ]
 then
     export NXF_CONTAINER_ENGINE=docker
-    docker_flag='-profile gh'
+    docker_flag='-stub -profile gh'
 else
     export SINGULARITY_FAKEROOT=1
     docker_flag=''
@@ -19,7 +19,7 @@ bfd="/nemo/lab/johnsone/reference/hhdb/bfd_metaclust/bfd_metaclust_clu_complete_
 
 # Examples without sample sheet
 nextflow run "$script_dir"/.. \
-    -stub -resume $docker_flag \
+    -resume $docker_flag \
     --test \
     --outputs custom-test \
     --organism_id 559292 \
@@ -31,7 +31,7 @@ nextflow run "$script_dir"/.. \
     --bfd "$bfd" --uniclust "$uniclust"
 
 nextflow run "$script_dir"/.. \
-    -stub -resume $docker_flag \
+    -resume $docker_flag \
     --test \
     --outputs bait-test \
     --organism_id 559292 \
@@ -40,7 +40,7 @@ nextflow run "$script_dir"/.. \
     --bfd "$bfd" --uniclust "$uniclust"
 
 nextflow run "$script_dir"/.. \
-    -stub -resume $docker_flag \
+    -resume $docker_flag \
     --test \
     --outputs bait-taxon-test \
     --organism_id 1773 \
@@ -51,7 +51,7 @@ nextflow run "$script_dir"/.. \
     --bfd "$bfd" --uniclust "$uniclust"
 
 nextflow run "$script_dir"/.. \
-    -stub -resume $docker_flag \
+    -resume $docker_flag \
     --test \
     --outputs self-test \
     --organism_id 243273 \
@@ -62,7 +62,7 @@ nextflow run "$script_dir"/.. \
 for d in "$script_dir"/{self,bait,bait-taxon,custom}/
 do
     nextflow run "$script_dir"/.. \
-        -stub -resume $docker_flag \
+        -resume $docker_flag \
         -c "$d"nextflow.config \
         --test \
         --plots \

@@ -533,11 +533,15 @@ workflow {
       .set { ppi_outputs }
    map_gene_names_from_file1(
       ppi_outputs,
-      Channel.value( "uniprot_id_1" )
+      Channel.value( "uniprot_id_1" ),
+      Channel.value( "gene_name_1" ),
+      Channel.value( false ),
    )
    map_gene_names_from_file2(
       map_gene_names_from_file1.out,
-      Channel.value( "uniprot_id_2" )
+      Channel.value( "uniprot_id_2" ),
+      Channel.value( "gene_name_2" ),
+      Channel.value( true ),
    )
 
 }
