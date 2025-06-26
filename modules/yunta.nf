@@ -52,7 +52,7 @@ process run_dca {
 
    stub:
    """
-   touch "dca.tsv"
+   printf 'method\\tID\\ndca\\tA-B\\n' > "dca.tsv"
    mkdir "dca-plot"
    touch "dca-plot/plot.png"
    echo "Skipping DCA for stub"
@@ -113,7 +113,7 @@ process run_rf2track {
 
    stub:
    """
-   touch "rf2t.tsv"
+   printf 'method\\tID\\nrf2t\\tA-B\\n' > "rf2t.tsv"
    mkdir "rf2t-plot"
    touch "rf2t-plot/plot.png"
    echo "Skipping RF2t for stub"
@@ -189,7 +189,7 @@ process run_af2 {
    """
    mkdir "af2"
    touch "af2/stub.pdb"
-   touch "af2.tsv"
+   printf 'method\\tID\\naf2\\tA-B\\n' > "af2.tsv"
    echo "Skipping AF2 for stub"
    """
 }
