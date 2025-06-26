@@ -224,3 +224,35 @@ process stack_table {
    && rm "table0.tsv"
    """
 }
+
+
+process stack_table_py {
+
+   tag "${id}-${filename}"
+
+   publishDir( 
+      "${params.outputs}/ppi", 
+      mode: 'copy',
+      saveAs: { "${id}-${filename}.tsv" },
+   )
+
+   input:
+   tuple val( id ), path( tables, stageAs: "inputs/????.tsv" )
+   val filename
+
+   output:
+   tuple val( id ), path( "table.tsv" )
+
+   script:
+   """
+   python -c '
+   from glob import glob
+   import pandas as pd
+   
+   files = glob("inputs/*.tsv")
+   df = pd.concat([pd.read_csv(f, sep="\\t") for f in files], axis=0)
+   df.sort_values(["method", "ID"]).to_csv("table.tsv", sep="\\t", index=False)
+   
+   '
+   """
+}
