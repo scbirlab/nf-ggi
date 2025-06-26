@@ -64,20 +64,20 @@ pre-clustered sequences is required. Unfortunately, these are extremely large, s
 part of the pipeline. You should download the [UniClust](https://uniclust.mmseqs.com/) and [BFD](https://bfd.mmseqs.com/) 
 databases, then set the `--uniclust` and `--bfd` parameters of the pipeline ([see below](#inputs)).
 
-If you're at the Crick, these databases already reside on NEMO, and there is no need to downlaod them.
+**If you're at the Crick, these databases already reside on NEMO, and there is no need to downlaod them.**
 
 ### Software
 
-You need to have Nextflow and `conda` installed on your system.
+You need to have Nextflow and either Singularity, Docker, of conda installed on your system.
 
 #### First time using Nextflow?
 
 ##### Crick users
 
-If you're at the Crick **or your shared cluster has it already installed**, try:
+If you're at the Crick **or your shared cluster has Nextflow and Singularity already installed**, try:
 
 ```bash
-module load Nextflow
+module load Nextflow Singularity
 ```
 
 ##### Others
@@ -116,11 +116,14 @@ The easiest way to get going is by specifying parameters on the command-line:
 ```bash
 bfd=path/to/your/bfd
 uniclust=path/to/your/uniclust
-nextflow run scbirlab/nf-ggi --bfd "$bfd" --uniclust "$uniclust" --organism_id 243273 --dca --rf2t  --plots
+nextflow run scbirlab/nf-ggi \
+    --bfd "$bfd" --uniclust "$uniclust" \
+    --organism_id 243273 \
+    --dca --rf2t  --plots
 ```
 
 Here's what the flags mean:
--  `--organism_id`: The Taxon ID of the organism, whih you can find at NCBI or UniProt
+- `--organism_id`: The Taxon ID of the organism, whih you can find at NCBI or UniProt
 - `--dca`, `--rf2t`: Run direct-coupling analysis and RosettaFold-2track
 - `--plots`: Generate amino acid contact maps. This takes about 10MB per protein-protein interaction, so be sure you have enough disk space!
 
@@ -159,10 +162,10 @@ pipeline, use the `-latest` flag.
 nextflow run scbirlab/nf-ggi -latest
 ```
 
-If you want to run a particular tagged version of the pipeline, such as `v0.0.1`, you can do so using
+If you want to run a particular tagged version of the pipeline, such as `v0.0.2`, you can do so using
 
 ```bash 
-nextflow run scbirlab/nf-ggi -r v0.0.1
+nextflow run scbirlab/nf-ggi -r v0.0.2
 ```
 
 For help, use `nextflow run scbirlab/nf-ggi --help`.
@@ -172,14 +175,18 @@ This may take several minutes.
 
 ## Inputs
 
-### Command-line usage
+### Command-line usage
 
 The pipeline can be run with command-line arguments:
 
 ```bash
+# intra-species all-vs-all:
 nextflow run scbirlab/nf-ggi --uniclust <path> --bfd <path> --organism_id <taxon ID>
+# intra-species all-vs-1:
 nextflow run scbirlab/nf-ggi --uniclust <path> --bfd <path> --organism_id <taxon ID> --bait <UniProtID>
+# inter-species all-vs-all:
 nextflow run scbirlab/nf-ggi --uniclust <path> --bfd <path> --organism_id <taxon ID> --bait <taxon ID> --bait_is_taxon --interspecies
+# custom list of pairs:
 nextflow run scbirlab/nf-ggi --uniclust <path> --bfd <path> --organism_id <taxon ID> --filename <path> --column1 <gene-col1> --column2 <gene-col2> [--interspecies --organism_id2 <taxon ID>] [--format <gene-name-type>]
 ```
 
@@ -249,7 +256,7 @@ In this case, `combos.csv` must be in the `inputs` folder defined above. It woul
 
 Further examples are in the `test` directory of this repository.
 
-### Config-file usage (recommended)
+### Config-file usage (recommended)
 
 For reproducibility, self-documentation, and to save typing, parameters with the same names as the command line flags above can be provided in a `nextflow.config` file in the working directory. For example:
 
