@@ -192,7 +192,7 @@ process map_gene_names_from_file {
    import pandas as pd
    
    pd.merge(
-      pd.read_csv("${table}", sep="\\t"),
+      pd.read_csv("input.tsv", sep="\\t"),
       pd.read_csv("uniprot-ids.csv", sep=",").rename(columns={"Gene_Name": "${out_column}"}),
    ).drop_duplicates().to_csv("named-ids.tsv", sep="\\t", index=False)
    
