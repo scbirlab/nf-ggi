@@ -7,7 +7,7 @@ GITHUB=${1:-no}
 if [ "$GITHUB" == "gh" ]
 then
     export NXF_CONTAINER_ENGINE=docker
-    docker_flag='-profile gh'
+    docker_flag='-profile gh -stub'
 else
     export SINGULARITY_FAKEROOT=1
     docker_flag=''
