@@ -72,6 +72,35 @@ process fetch_fasta_from_uniprot_id {
 }
 
 
+process fetch_fastas_from_uniprot_ids {
+
+   tag "${uniprot_ids[0]}...${uniprot_ids[-1]}"
+
+   publishDir( 
+      "${params.outputs}/sequences", 
+      mode: 'copy',
+      saveAs: { "${uniprot_ids[0]}-${uniprot_ids[-1]}.fasta" },
+   )
+
+   input:
+   tuple val( id ), val( uniprot_ids )
+
+   output:
+   tuple val( id ), path( "proteins.fasta" )
+
+   script:
+   """
+   set -x
+   curl -X GET --header 'Accept:text/x-fasta' \
+      'https://www.ebi.ac.uk/proteins/api/proteins?offset=0&size=-1&accession=${uniprot_ids.join(',')}' \
+   > proteins.fasta
+
+   """
+
+}
+
+
+
 process map_uniprot_ids_from_file {
 
    tag "${id}-${column}:${from_type}"
