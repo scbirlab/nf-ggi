@@ -8,7 +8,12 @@ dependencies:
     - python==3.12
     - pip
     - bioconda::hhsuite
+    - conda-forge::ca-certificates
+    - conda-forge::curl
     - conda-forge::jq
     - conda-forge::rdkit
+    - conda-forge::wget
     - pip:
+        - "pandas"
         - "yunta[cuda12]>=0.0.3"
+        

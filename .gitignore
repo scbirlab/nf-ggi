@@ -1,4 +1,7 @@
 .nextflow*
+.conda/
+.docker/
+.singularity/
 /outputs/
 /work/
 /test/*-test/
@@ -11,3 +14,4 @@
 *.html
 *.requirements.txt
 *.log
+work/

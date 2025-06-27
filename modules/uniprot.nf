@@ -72,6 +72,35 @@ process fetch_fasta_from_uniprot_id {
 }
 
 
+process fetch_fastas_from_uniprot_ids {
+
+   tag "${uniprot_ids[0]}...${uniprot_ids[-1]}"
+
+   publishDir( 
+      "${params.outputs}/sequences", 
+      mode: 'copy',
+      saveAs: { "${uniprot_ids[0]}-${uniprot_ids[-1]}.fasta" },
+   )
+
+   input:
+   tuple val( id ), val( uniprot_ids )
+
+   output:
+   tuple val( id ), path( "proteins.fasta" )
+
+   script:
+   """
+   set -x
+   curl -X GET --header 'Accept:text/x-fasta' \
+      'https://www.ebi.ac.uk/proteins/api/proteins?offset=0&size=-1&accession=${uniprot_ids.join(',')}' \
+   > proteins.fasta
+
+   """
+
+}
+
+
+
 process map_uniprot_ids_from_file {
 
    tag "${id}-${column}:${from_type}"
@@ -106,17 +135,23 @@ process map_uniprot_ids_from_file {
 
 process map_gene_names_from_file {
 
-   tag "${id}-${column}"
+   tag "${id}-${column}:${out_column}"
+
+   // if ( "${save}" == "true" ) {
 
    publishDir( 
       "${params.outputs}/ppi", 
       mode: 'copy',
-      saveAs: { "${id}-${table.getSimpleName()}-${column}.txt" },
+      saveAs: { "${id}-${table.getSimpleName()}-${out_column}.tsv" },
    )
+
+   // }
 
    input:
    tuple val( id ), path( table )
    val column
+   val out_column
+   val save
 
    output:
    tuple val( id ), path( "named-ids.tsv" )
@@ -125,71 +160,43 @@ process map_gene_names_from_file {
    """
    set -x
 
-   get_column_number () (
-      local col_name="\$1"
-      head -n1 | tr \$'\t' \$'\n' | grep -n "\$col_name" | cut -d: -f1
-   )
-
-   sort_table () (
-      local col_name="\$1"
-      local tempfile="aaaaaa"
-      cat > \$tempfile
-
-      col_number=\$(get_column_number "\$col_name" < \$tempfile)
-      head -n1 \$tempfile \
-      | cat - <(tail -n+2 \$tempfile | sort -k"\$col_number") \
-      && rm \$tempfile
-   )
-
    bash ${projectDir}/bin/uniprot/uniprot-ids.sh \
       "${table}" "${column}" \
-      "uniprot-ids0.txt" \
+      "uniprot-ids.csv" \
       Gene_Name UniProtKB
-   sort_table "${column}" < uniprot-ids0.txt" \
-   > "uniprot-ids.txt"
-   join_col=\$(get_column_number "${column}" < "${table}")
-   join --header -1 "\$join_col" -2 1 \
-      <(sort_table "${column}" < "${table}") \
-      "uniprot-ids.txt" \
-   > "named-ids.tsv"
+
+   python -c '
+   import pandas as pd
+   
+   pd.merge(
+      pd.read_csv("${table}", sep="\\t"),
+      pd.read_csv("uniprot-ids.csv", sep=",").rename(columns={"Gene_Name": "${out_column}"}),
+   ).drop_duplicates().to_csv("named-ids.tsv", sep="\\t", index=False)
+   
+   '
+
    """
 
    stub:
    """
-
    set -x
-
-   get_column_number () (
-      local col_name="\$1"
-      head -n1 | tr \$'\t' \$'\n' | grep -n "\$col_name" | cut -d: -f1
-   )
-
-   sort_table () (
-      local col_name="\$1"
-      local tempfile="aaaaaa"
-      cat > \$tempfile
-
-      col_number=\$(get_column_number "\$col_name" < \$tempfile)
-      head -n1 \$tempfile \
-      | cat - <(tail -n+2 \$tempfile | sort -k"\$col_number") \
-      && rm \$tempfile
-   )
 
    cp ${projectDir}/data/559292-dca-stub.tsv input.tsv
 
    bash ${projectDir}/bin/uniprot/uniprot-ids.sh \
       input.tsv "${column}" \
-      "uniprot-ids0.txt" \
+      "uniprot-ids.csv" \
       Gene_Name UniProtKB
-   sort_table "${column}" < "uniprot-ids0.txt" \
-   | sed 's/Gene_Name/${column}_gene_name/g' \
-   > "uniprot-ids.csv"
-   join_col=\$(get_column_number "${column}" < "input.tsv")
-   join --header -t \$'\t' \
-      -1 1 -2 "\$join_col"  \
-      <(tr , \$'\t' < "uniprot-ids.csv") \
-      <(sort_table "${column}" < "input.tsv") \
-   > "named-ids.tsv"
+   
+   python -c '
+   import pandas as pd
+   
+   pd.merge(
+      pd.read_csv("input.tsv", sep="\\t"),
+      pd.read_csv("uniprot-ids.csv", sep=",").rename(columns={"Gene_Name": "${out_column}"}),
+   ).drop_duplicates().to_csv("named-ids.tsv", sep="\\t", index=False)
+   
+   '
 
    """
 

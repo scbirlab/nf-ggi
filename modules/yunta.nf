@@ -3,8 +3,8 @@ process run_dca {
    label 'big_time'
    tag "${id}-${uniprot_id_bait}:${batch_idx}"
    stageInMode 'link'
-   // errorStrategy 'retry'
-   // maxRetries 2
+   errorStrategy 'retry'
+   maxRetries 2
 
    publishDir( 
       "${params.outputs}/dca", 
@@ -52,7 +52,7 @@ process run_dca {
 
    stub:
    """
-   touch "dca.tsv"
+   printf 'method\\tID\\ndca\\tA-B\\n' > "dca.tsv"
    mkdir "dca-plot"
    touch "dca-plot/plot.png"
    echo "Skipping DCA for stub"
@@ -64,8 +64,8 @@ process run_rf2track {
    label 'gpu_single'
    tag "${id}-${uniprot_id_bait}:${batch_idx}"
    stageInMode 'link'
-   // errorStrategy 'retry'
-   // maxRetries 2
+   errorStrategy 'retry'
+   maxRetries 2
 
    publishDir( 
       "${params.outputs}/rf2t", 
@@ -113,7 +113,7 @@ process run_rf2track {
 
    stub:
    """
-   touch "rf2t.tsv"
+   printf 'method\\tID\\nrf2t\\tA-B\\n' > "rf2t.tsv"
    mkdir "rf2t-plot"
    touch "rf2t-plot/plot.png"
    echo "Skipping RF2t for stub"
@@ -189,7 +189,7 @@ process run_af2 {
    """
    mkdir "af2"
    touch "af2/stub.pdb"
-   touch "af2.tsv"
+   printf 'method\\tID\\naf2\\tA-B\\n' > "af2.tsv"
    echo "Skipping AF2 for stub"
    """
 }
@@ -222,5 +222,37 @@ process stack_table {
    | cat - <(tail -n+2 "table0.tsv" | sort -k3,4 ) \
    > "table.tsv" \
    && rm "table0.tsv"
+   """
+}
+
+
+process stack_table_py {
+
+   tag "${id}-${filename}"
+
+   publishDir( 
+      "${params.outputs}/ppi", 
+      mode: 'copy',
+      saveAs: { "${id}-${filename}.tsv" },
+   )
+
+   input:
+   tuple val( id ), path( tables, stageAs: "inputs/????.tsv" )
+   val filename
+
+   output:
+   tuple val( id ), path( "table.tsv" )
+
+   script:
+   """
+   python -c '
+   from glob import glob
+   import pandas as pd
+   
+   files = glob("inputs/*.tsv")
+   df = pd.concat([pd.read_csv(f, sep="\\t") for f in files], axis=0)
+   df.sort_values(["method", "ID"]).to_csv("table.tsv", sep="\\t", index=False)
+   
+   '
    """
 }

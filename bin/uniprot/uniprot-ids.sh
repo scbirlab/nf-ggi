@@ -2,7 +2,7 @@
 
 FILENAME="$1"
 COLUMN="$2"
-OUTPUT=${3:-"uniprot-ids.txt"}
+OUTPUT=${3:-"uniprot-ids.csv"}
 TO=${4:-"UniProtKB"}
 FROM=${5:-"Gene_Name"}
 ORGANISM_ID=${6:-"Placeholder Organism ID"}
@@ -116,4 +116,4 @@ then
     exit 1
 fi
 
-grep -v '^\$' "$tempfile" > "$OUTPUT" 
+grep -v '^\$' "$tempfile" > "$OUTPUT"

@@ -1,9 +1,10 @@
 process make_msa_from_fasta {
 
    tag "${id}"
-   label 'big_cpu'
-   // errorStrategy 'retry'
-   // maxRetries 2
+   label 'big_cpu_mem'
+   
+   errorStrategy 'retry'
+   maxRetries 2
 
    publishDir( 
       "${params.outputs}/msa", 

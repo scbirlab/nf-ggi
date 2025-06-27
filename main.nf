@@ -153,6 +153,7 @@ include {
    fetch_fastas_from_organism_id;
    fetch_fastas_from_organism_id as fetch_fastas_from_organism_id_bait;
    fetch_fasta_from_uniprot_id;
+   fetch_fastas_from_uniprot_ids;
    map_uniprot_ids_from_file;
    map_uniprot_ids_from_file as map_uniprot_ids_from_file_bait;
    map_gene_names_from_file as map_gene_names_from_file1;
@@ -162,6 +163,7 @@ include {
    run_dca;
    run_rf2track;
    run_af2;
+   stack_table_py;
    stack_table as stack_dca;
    stack_table as stack_rf2t;
    stack_table as stack_af2;
@@ -318,18 +320,31 @@ workflow {
                uniprot_B.map { tuple( it[0], it[1] ) }
             )
             .unique()
-            | fetch_fasta_from_uniprot_id   // Organism ID, FASTA file
+            .groupTuple(by: 0, sort: true)
+            .map { tuple(
+               it[0],
+               it[1].withIndex().collect { 
+                  el, i -> Math.round(Math.floor(i / 100)) 
+               },
+               it[1],
+            )}
+            .transpose()
+            .groupTuple(by: [0, 1], sort: true)
+            .map { tuple( it[0], it[-1] ) }
+            | fetch_fastas_from_uniprot_ids
 
-         fetch_fasta_from_uniprot_id.out
+         fetch_fastas_from_uniprot_ids.out
             .splitFasta( elem: 1, record: [id: true, text: true] )   // Organism ID, bait FASTA text
             .map { [ it[0] ] + it[1].id.split('\\|')[1..2] + [ it[1].text ] }  // Organism ID, UniProtID, Entry Name, FASTA text
             .set { all_fasta_custom }
          
          all_fasta_custom
             .combine( uniprot_A, by: [0, 1] )
+            .unique()
             .set { fastas_A }
          all_fasta_custom
             .combine( uniprot_B, by: [0, 1] )
+            .unique()
             .set { fastas_B }
 
    }
@@ -395,7 +410,7 @@ workflow {
       .map { tuple( it[2], it[0], it[1] ) }  // Organism ID, UniProtID, MSA
       .tap { all_msas }
       .join(
-         fastas_A.map{ it[0..1] },
+         fastas_A2.map{ it[0..1] }.unique(),
          by: [0, 1],
          failOnDuplicate: true,
       )  // Organism ID, UniProtID, MSA
@@ -403,7 +418,7 @@ workflow {
 
    all_msas
       .join(
-         fastas_B2.map{ it[0..1] },
+         fastas_B2.map{ it[0..1] }.unique(),
          by: [0, 1],
          failOnDuplicate: true,
       )  // Organism ID, bait UniProtID, bait MSA
@@ -422,7 +437,8 @@ workflow {
       : crossed_msa.filter { it[1] != it[-2] } 
    )  // If self-cross, only take lower triangle
       .groupTuple( 
-         by: [0, 1, 2]
+         by: [0, 1, 2],
+         sort: true,
       )  // Organism ID, Bait UniProt ID, Bait MSA, [UniProtID, ...], [MSA, ...]
       .map { 
          tuple(
@@ -435,7 +451,8 @@ workflow {
       }  // Organism ID, Bait UniProt ID, Bait MSA, [batch_i, ...], [UniProtID, ...], [MSA, ...]
       .transpose()  // Organism ID, Bait UniProt ID, Bait MSA, batch_i, UniProtID, MSA
       .groupTuple( 
-         by: [0, 1, 2, 3]
+         by: [0, 1, 2, 3],
+         sort: true,
       )  // Organism ID, Bait UniProt ID, Bait MSA, batch_i, [UniProtID, ...], [MSA, ...]
       .filter { it[-1].size() > 0 }  // filter out trivial (size-0) elements
       .set { msa_pairs0 }
@@ -457,12 +474,15 @@ workflow {
          interspecies, 
          make_coevo_plots,
       )
-      stack_dca(
-         run_dca.out.main
-            .groupTuple( by: 0 ),  // Organism ID, [tsv, ...]
-         Channel.value( "dca" )
-      ) // Organism ID, tsv
-         | set { stacked_dca }
+      // stack_dca(
+      //    run_dca.out.main
+      //       .groupTuple( 
+      //          by: 0,
+      //          sort: true,
+      //     ),  // Organism ID, [tsv, ...]
+      //    Channel.value( "dca" )
+      // ) // Organism ID, tsv
+       run_dca.out.main.set { stacked_dca }
    }
 
    else {
@@ -478,12 +498,15 @@ workflow {
          interspecies, 
          make_coevo_plots,
       )
-      stack_rf2t(
-         run_rf2track.out.main
-            .groupTuple( by: 0 ),  // Organism ID, [tsv, ...]
-         Channel.value( "rf2t" )
-      )  // Organism ID, tsv
-         | set { stacked_rf2t }
+      // stack_rf2t(
+      //    run_rf2track.out.main
+      //       .groupTuple( 
+      //          by: 0,
+      //          sort: true,
+      //       ),  // Organism ID, [tsv, ...]
+      //    Channel.value( "rf2t" )
+      // )  // Organism ID, tsv
+         run_rf2track.out.main.set { stacked_rf2t }
    }
 
    else {
@@ -499,12 +522,15 @@ workflow {
          interspecies, 
          make_coevo_plots,
       )
-      stack_af2(
-         run_af2.out.main
-            .groupTuple( by: 0 ),  // Organism ID, [tsv, ...]
-         Channel.value( "af2" )
-      )  // Organism ID, tsv
-         | set { stacked_af2 }
+      // stack_af2(
+      //    run_af2.out.main
+      //       .groupTuple( 
+      //          by: 0,
+      //          sort: true,
+      //       ),  // Organism ID, [tsv, ...]
+      //    Channel.value( "af2" )
+      // )  // Organism ID, tsv
+      run_af2.out.main.set { stacked_af2 }
    }
 
    else {
@@ -514,19 +540,36 @@ workflow {
 
    }
 
-   stacked_dca
+   stack_table_py(
+      stacked_dca
       .concat(
          stacked_rf2t,
          stacked_af2,
       )
-      .set { ppi_outputs }
+      .groupTuple( 
+         by: 0,
+         sort: true,
+      ),  // Organism ID, [tsv, ...]
+      Channel.value( "ppi-table" ),
+   )
+   | set { ppi_outputs }
+   // stacked_dca
+   //    .concat(
+   //       stacked_rf2t,
+   //       stacked_af2,
+   //    )
+   //    .set { ppi_outputs }
    map_gene_names_from_file1(
       ppi_outputs,
-      Channel.value( "uniprot_id_1" )
+      Channel.value( "uniprot_id_1" ),
+      Channel.value( "gene_name_1" ),
+      Channel.value( false ),
    )
    map_gene_names_from_file2(
       map_gene_names_from_file1.out,
-      Channel.value( "uniprot_id_2" )
+      Channel.value( "uniprot_id_2" ),
+      Channel.value( "gene_name_2" ),
+      Channel.value( true ),
    )
 
 }
