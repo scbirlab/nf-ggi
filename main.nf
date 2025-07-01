@@ -112,6 +112,10 @@ log.info pipeline_title + """\
    mode                    : ${params.mode}
       Bait is Taxon ID     : ${params.bait_is_taxon}
       Interspecies         : ${params.interspecies}
+   proteome options
+      Reviewed             : ${params.reviewed}
+      Isoforms             : ${params.isoforms}
+      Other options        : ${params.proteome_opts}
    inputs
       input_dir            : ${params.inputs}
       sample sheet         : ${params.sample_sheet}
