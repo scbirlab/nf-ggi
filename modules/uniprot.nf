@@ -107,47 +107,49 @@ process fetch_fastas_from_organism_id_v3 {
    COMMON_PARAMS='offset=0&size=-1'
    PROTEIN_PARAMS='${reviewed_param}${isoform_param}${extra_params}'
 
-   curl -X GET --header 'Accept:application/json' \
-      "\$EBI_API_URL"'/proteomes?'"\$COMMON_PARAMS"'&is_redundant=false&taxid='"${organism_id}" \
+   function get_proteome_id() (
+      curl -s "https://rest.uniprot.org/proteomes/search?query=(organism_id:${organism_id})&format=json" \
       | jq -r '
-         [ .[] | select(.redundantTo == null) ] as \$nr 
-         
-         | (
-            [ \$nr[] | select(.isReferenceProteome and .isRepresentativeProteome) ] 
-            + [ \$nr[] | select(.isReferenceProteome) ] 
-            + [ \$nr[] | select(.isRepresentativeProteome) ] 
-            + \$nr
-         ) 
-         | first
-         | ( .upid // empty )
-      ' \
-   > proteome-id.txt
+         .results[]
+         | select(.proteomeType == "'"\$1"' proteome")
+         | .id
+      '
+   )
+   QUERIES=("Reference and representative" "Reference" "Representative" "Other")
+   PROTEOME_ID=
+   for q in "\${QUERIES[@]}"
+   do
+      PROTEOME_ID=\$(get_proteome_id "\$q")
+      if [ ! -z \$PROTEOME_ID ]
+      then 
+         break
+      fi
+   done
 
-   if [ ! -s "proteome-id.txt" ]
-   then
-      echo "Could not find a proteome for taxon ${organism_id}!"
-      echo " - Try ""\$EBI_API_URL"'/proteomes?'"\$COMMON_PARAMS"'&taxid='"${organism_id}"
-      exit 1
+   if [ -z \$PROTEOME_ID ]
+   then 
+      echo "Could not find any UniProt proteomes for taxon ${organism_id}!"
+      echo " - Try ""https://rest.uniprot.org/proteomes/search?query=(organism_id:${organism_id})&format=json"
    fi
 
    curl -X GET --header 'Accept:application/json' \
-      "\$EBI_API_URL"'/genecentric?'"\$COMMON_PARAMS"'&upid='"\$(head -n1 proteome-id.txt)" \
+      "\$EBI_API_URL"'/genecentric?'"\$COMMON_PARAMS"'&upid='"\$PROTEOME_ID" \
       | jq -r '.[] | .gene | .accession' \
    > uniprot-ids.txt
 
    if [ ! -s "uniprot-ids.txt" ]
    then
-      echo "Could not find any gene-centric UniProt accessions for taxon ${organism_id}, proteome ID \$(head -n1 proteome-id.txt)!"
+      echo "Could not find any gene-centric UniProt accessions for taxon ${organism_id}, proteome ID \$PROTEOME_ID!"
       echo " - Try ""\$EBI_API_URL"'/genecentric?'"\$COMMON_PARAMS"'&upid='"\$(head -n1 proteome-id.txt)"
       echo "Falling back to UniProt API"
 
-      curl 'https://rest.uniprot.org/uniprotkb/stream?query=(proteome:'"\$(head -n1 proteome-id.txt)"')&format=list&download=true' \
+      curl 'https://rest.uniprot.org/uniprotkb/stream?query=(proteome:'"\$PROTEOME_ID"')&format=list&download=true' \
       > uniprot-ids.txt
 
       if [ ! -s "uniprot-ids.txt" ]
       then
-         echo "Could not find any UniProt accessions for taxon ${organism_id}, proteome ID \$(head -n1 proteome-id.txt)!"
-         echo " - Try "'https://rest.uniprot.org/uniprotkb/stream?query=(proteome:'"\$(head -n1 proteome-id.txt)"')&format=list&download=true'
+         echo "Could not find any UniProt accessions for taxon ${organism_id}, proteome ID \$PROTEOME_ID!"
+         echo " - Try "'https://rest.uniprot.org/uniprotkb/stream?query=(proteome:'"\$PROTEOME_ID"')&format=list&download=true'
          exit 1
       fi
    fi
