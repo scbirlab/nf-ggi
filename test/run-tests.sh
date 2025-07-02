@@ -73,5 +73,6 @@ do
         --plots \
         --sample_sheet "$d"inputs/sample-sheet.csv \
         --inputs "$d"inputs \
-        --outputs "$d"outputs
+        --outputs "$d"outputs \
+        --bfd "$bfd" --uniclust "$uniclust"
 done
