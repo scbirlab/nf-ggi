@@ -43,7 +43,7 @@ process fetch_fastas_from_organism_id {
 }
 
 
-process fetch_fastas_from_organism_id2 {
+process fetch_fastas_from_organism_id_v2 {
 
    tag "${id}"
 
@@ -65,7 +65,7 @@ process fetch_fastas_from_organism_id2 {
    script:
    def extra_params = extras ? "&${extras}" : ""
    def isoform_param = isoforms ? "&isoform=2" : "&isoform=0"
-   def reviewed_param = reviewed ? "&reviewed=true" : "&reviewed=false"
+   def reviewed_param = reviewed ? "&reviewed=true" : ""
    """
    set -x
    EBI_API_URL='https://www.ebi.ac.uk/proteins/api/proteins?'
@@ -100,7 +100,7 @@ process fetch_fastas_from_organism_id_v3 {
    script:
    def extra_params = extras ? "&${extras}" : ""
    def isoform_param = isoforms ? "&isoform=2" : "&isoform=0"
-   def reviewed_param = reviewed ? "&reviewed=true" : "&reviewed=false"
+   def reviewed_param = reviewed ? "&reviewed=true" : ""
    """
    set -x
    EBI_API_URL='https://www.ebi.ac.uk/proteins/api'
@@ -108,7 +108,7 @@ process fetch_fastas_from_organism_id_v3 {
    PROTEIN_PARAMS='${reviewed_param}${isoform_param}${extra_params}'
 
    curl -X GET --header 'Accept:application/json' \
-      "\$EBI_API_URL"'/proteomes?'"\$COMMON_PARAMS"'&taxid='"${organism_id}" \
+      "\$EBI_API_URL"'/proteomes?'"\$COMMON_PARAMS"'&is_redundant=false&taxid='"${organism_id}" \
       | jq -r '
          [ .[] | select(.redundantTo == null) ] as \$nr 
          
@@ -139,12 +139,14 @@ process fetch_fastas_from_organism_id_v3 {
    then
       echo "Could not find any gene-centric UniProt accessions for taxon ${organism_id}, proteome ID \$(head -n1 proteome-id.txt)!"
       echo " - Try ""\$EBI_API_URL"'/genecentric?'"\$COMMON_PARAMS"'&upid='"\$(head -n1 proteome-id.txt)"
-      exit 1
+      echo "Falling back to UniProt API"
+
+      curl 'https://rest.uniprot.org/uniprotkb/stream?query=(proteome:'"\$(head -n1 proteome-id.txt)"')&format=list&download=true' \
+      > uniprot-ids.txt
    fi
 
    split -l 100 uniprot-ids.txt 'chunk_'
    chunks=(chunk_*)
-
    for chunk in \${chunks[@]}
    do
       ids=\$(tr '\\n' ',' < "\$chunk")
