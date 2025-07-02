@@ -43,6 +43,9 @@ if ( params.help ) {
                --column1, --column2   Column names from --filename to get protein IDs
 
          Command-line optional parameters:
+            --reviewed       Only pull SwissProt reviewed proteins from proteome
+            --isoforms       Additionally pull isoform sequences from proteome
+            --proteome_opts  Additonal filters for pulling from proteome. Check https://www.ebi.ac.uk/proteins/api/doc/#!/proteins/search for options.
             --bait_is_taxon  Indicate that bait is an organism ID
             --interspecies   Run analysis between interacting species proteomes
             --organism_id2   When providing a file of pairs, if the second protein (--column2) is from another organism than the first
