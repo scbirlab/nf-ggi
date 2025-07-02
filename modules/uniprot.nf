@@ -143,6 +143,13 @@ process fetch_fastas_from_organism_id_v3 {
 
       curl 'https://rest.uniprot.org/uniprotkb/stream?query=(proteome:'"\$(head -n1 proteome-id.txt)"')&format=list&download=true' \
       > uniprot-ids.txt
+
+      if [ ! -s "uniprot-ids.txt" ]
+      then
+         echo "Could not find any UniProt accessions for taxon ${organism_id}, proteome ID \$(head -n1 proteome-id.txt)!"
+         echo " - Try "'https://rest.uniprot.org/uniprotkb/stream?query=(proteome:'"\$(head -n1 proteome-id.txt)"')&format=list&download=true'
+         exit 1
+      fi
    fi
 
    split -l 100 uniprot-ids.txt 'chunk_'
