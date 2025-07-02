@@ -8,14 +8,19 @@ if [ "$GITHUB" == "gh" ]
 then
     export NXF_CONTAINER_ENGINE=docker
     docker_flag='-profile gh -stub'
+    uniclust="uniclust30_2018_08"
+    bfd="bfd_metaclust_clu_complete_id30_c90_final_seq.sorted_opt"
+    echo $uniclust > "$uniclust"_test
+    echo $uniclust > "$uniclust".test
+    echo $bfd > "$bfd"_test
 else
     export SINGULARITY_FAKEROOT=1
     docker_flag=''
+    uniclust="/nemo/lab/johnsone/reference/hhdb/uniclust30/uniclust30_2018_08"
+    bfd="/nemo/lab/johnsone/reference/hhdb/bfd_metaclust/bfd_metaclust_clu_complete_id30_c90_final_seq.sorted_opt"
 fi
 
 script_dir="$(dirname $0)"
-uniclust="/nemo/lab/johnsone/reference/hhdb/uniclust30/uniclust30_2018_08"
-bfd="/nemo/lab/johnsone/reference/hhdb/bfd_metaclust/bfd_metaclust_clu_complete_id30_c90_final_seq.sorted_opt"
 
 # Examples without sample sheet
 nextflow run "$script_dir"/.. \
