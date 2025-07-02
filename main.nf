@@ -177,11 +177,11 @@ include {
 workflow {
 
    Channel.value( tuple(
-      file( params.bfd ).getBaseName(),
+      file( params.bfd ).getName(),
       file( "${params.bfd}_*", checkIfExists: true ),
    ) ).set { bfd }
    Channel.value( tuple(
-      file( params.uniclust ).getBaseName(),
+      file( params.uniclust ).getName(),
       file( "${params.uniclust}{_,.}*", checkIfExists: true ),
    ) ).set { uniclust }
    Channel.of( params.rhea_url ).set { rhea_url }
