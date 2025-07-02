@@ -176,8 +176,14 @@ include {
 
 workflow {
 
-   Channel.value( params.bfd ).set { bfd }
-   Channel.value( params.uniclust ).set { uniclust }
+   Channel.value( tuple(
+      file( params.bfd ).getBaseName(),
+      file( "${params.bfd}_*", checkIfExists: true ),
+   ) ).set { bfd }
+   Channel.value( tuple(
+      file( params.uniclust ).getBaseName(),
+      file( "${params.uniclust}{_,.}*", checkIfExists: true ),
+   ) ).set { uniclust }
    Channel.of( params.rhea_url ).set { rhea_url }
 
    if ( params.sample_sheet ) {
