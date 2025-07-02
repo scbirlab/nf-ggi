@@ -113,6 +113,7 @@ process fetch_fastas_from_organism_id_v3 {
          .results[]
          | select(.proteomeType == "'"\$1"' proteome")
          | .id
+         | (first // empty)
       '
    )
    QUERIES=("Reference and representative" "Reference" "Representative" "Other")
