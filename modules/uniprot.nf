@@ -80,7 +80,7 @@ process fetch_fastas_from_organism_id_v2 {
 
 process fetch_fastas_from_organism_id_v3 {
 
-   tag "${id}"
+   tag "${id}:${organism_id}"
 
    publishDir( 
       "${params.outputs}/sequences", 
