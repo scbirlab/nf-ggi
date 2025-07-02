@@ -26,6 +26,17 @@ script_dir="$(dirname $0)"
 nextflow run "$script_dir"/.. \
     -resume $docker_flag \
     --test \
+    --outputs bait-taxon-test \
+    --organism_id 1773 \
+    --bait 28369 \
+    --bait_is_taxon \
+    --interspecies \
+    --dca --rf2t \
+    --bfd "$bfd" --uniclust "$uniclust"
+    
+nextflow run "$script_dir"/.. \
+    -resume $docker_flag \
+    --test \
     --outputs custom-test \
     --organism_id 559292 \
     --filename "$script_dir"/custom/inputs/sgadata_costanzo2009_rawdata_101120-wheader_10q.txt \
@@ -41,17 +52,6 @@ nextflow run "$script_dir"/.. \
     --outputs bait-test \
     --organism_id 559292 \
     --bait P00931 \
-    --dca --rf2t \
-    --bfd "$bfd" --uniclust "$uniclust"
-
-nextflow run "$script_dir"/.. \
-    -resume $docker_flag \
-    --test \
-    --outputs bait-taxon-test \
-    --organism_id 1773 \
-    --bait 28369 \
-    --bait_is_taxon \
-    --interspecies \
     --dca --rf2t \
     --bfd "$bfd" --uniclust "$uniclust"
 
