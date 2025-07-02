@@ -157,8 +157,8 @@ include {
    fetch_string_database;
 } from './modules/string.nf'
 include { 
-   fetch_fastas_from_organism_id2;
-   fetch_fastas_from_organism_id2 as fetch_fastas_from_organism_id_bait;
+   fetch_fastas_from_organism_id_v3 as fetch_fastas_from_organism_id;
+   fetch_fastas_from_organism_id_v3 as fetch_fastas_from_organism_id_bait;
    fetch_fasta_from_uniprot_id;
    fetch_fastas_from_uniprot_ids;
    map_uniprot_ids_from_file;
@@ -230,7 +230,7 @@ workflow {
 
    if ( mode == 'self' || mode == 'bait' ) {
 
-      fetch_fastas_from_organism_id2(
+      fetch_fastas_from_organism_id(
          sample_rows
             .map { tuple( it.organism_id, it.organism_id ) }
             .unique(),
@@ -238,7 +238,7 @@ workflow {
          Channel.value(params.reviewed),
          Channel.value(params.proteome_opts),
       )  // Organism ID, FASTAs gz
-      fetch_fastas_from_organism_id2.out
+      fetch_fastas_from_organism_id.out
          .splitFasta( elem: 1, record: [id: true, text: true] )  // Organism ID, FASTA text
          .map { [ it[0] ] + it[1].id.split('\\|')[1..2] + [ it[1].text ] }  // Organism ID, UniProtID, Entry Name, FASTA text
          .set { fastas_A0 }
