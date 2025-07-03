@@ -22,11 +22,13 @@
 
 ## Processing steps
 
-1. Download Rhea DB (of metabolites) in preparation for searching.
+**scbirlab/nf-ggi** carries out the following steps:
+
+1. [Optional] Download Rhea DB (of metabolites) in preparation for searching.
 
 For proteins or proteomes in the [sample sheet](#sample-sheet):
 
-1. Download its STRING database and tidy up the data.
+1. [Optional] Download its STRING database and tidy up the data.
 2. Download FASTA sequences of proteins from UniProt
     - If multiple proteomes are available, choose according to this priority: "Reference and representative", "Reference", "Representative", "Other"
 3. Find reactions in Rhea DB and connect products with reactants between enzymes in the proteome.
@@ -47,15 +49,15 @@ For `method == "custom"`:
 
 5. All unique pairs of proteins listed.
 
-Then for each protein pair, optionally:
+Then for each protein pair, **optionally**:
 
-6. Calculate the co-evolutionary signal with DCA, optionally generating plots of contact maps.
-7. Predict the interface contact map with `yunta rf2t` (RosettaFold-2track), optionally generating plots of contact maps.
-8. Predict the protein-protein complex structure map with `yunta af2` (AlphaFold2), optionally generating plots of contact maps.
+6. with `--dca`: Calculate the co-evolutionary signal with DCA, optionally generating plots of contact maps.
+7. with `--rf2t`: Predict the interface contact map with `yunta rf2t` (RosettaFold-2track), optionally generating plots of contact maps.
+8. with `--af2`: Predict the protein-protein complex structure map with `yunta af2` (AlphaFold2), optionally generating plots of contact maps.
 
 ## Requirements
 
-You need access to the UniClust and BFD databases, and you need Nextflow and conda to be installed.
+You need access to the UniClust and BFD databases, and you need Nextflow and either conda, Singularity, or Docker to be installed.
 
 ### Databases
 
@@ -107,9 +109,9 @@ source ~/.bash_profile
 
 There are three run modes for the pipeline:
 
-- "self": run all protein-protein interactions within an organism
-- "bait": run interactions between all proteins from an organism and either one protein or another organism's proteome
-- "custom": run specified protein pairs from a file
+- `"self"`: run all protein-protein interactions within an organism
+- `"bait"`: run interactions between all proteins from an organism and either one protein or another organism's proteome
+- `"custom"`: run specified protein pairs from a file
 
 The easiest way to get going is by specifying parameters on the command-line:
 
@@ -125,23 +127,34 @@ nextflow run scbirlab/nf-ggi \
 Here's what the flags mean:
 - `--organism_id`: The Taxon ID of the organism, whih you can find at NCBI or UniProt
 - `--dca`, `--rf2t`: Run direct-coupling analysis and RosettaFold-2track
-- `--plots`: Generate amino acid contact maps. This takes about 10MB per protein-protein interaction, so be sure you have enough disk space!
+- `--plots`: Generate amino acid contact maps. This takes about 10MB per protein-protein interaction, 
+so be sure you have enough disk space for the number of protein-protein pairs you're testing!
 
-You could also run `--metabolites` to get the metabolic network, and `--string` to get the STRING co-expression network.
+You can also run `--metabolites` to get the metabolic network, and `--string` to get the STRING co-expression network.
 
-Because only `--organism_id` is provided, the pipeline assumes "self" mode (i.e. all-vs-all within taxon 243273).
+Because only `--organism_id` was provided, the pipeline assumes "self" mode (i.e. all-vs-all within taxon 243273).
 
 You can run bait mode by providing `--bait <UniProt ID>`:
 
 ```bash
-nextflow run scbirlab/nf-ggi --bfd "$bfd" --uniclust "$uniclust" --organism_id 559292 --bait P00931 --dca
+nextflow run scbirlab/nf-ggi --bfd "$bfd" --uniclust "$uniclust" \
+    --organism_id 559292 --bait P00931 \
+    --dca
 ```
 
 The bait can be another organisms's proteome. In this case, we need to specifiy that `--bait_is_taxon` and `--interspecies`:
 
 ```bash
-nextflow run scbirlab/nf-ggi --bfd "$bfd" --uniclust "$uniclust" --organism_id 559292 --bait 1773 --bait_is_taxon --interspecies --rf2t
+nextflow run scbirlab/nf-ggi --bfd "$bfd" --uniclust "$uniclust" \
+    --organism_id 559292 --bait 1773 \
+    --bait_is_taxon --interspecies \
+    --rf2t
 ```
+
+### Running with Singularity, Docker, or Conda
+
+**scbirlab/nf-ggi** runs on a Singularity container engine by default to ensure software versions are consistent. If you have 
+docker installed, you can run using `-with-docker` to use it instead, or if you have Conda you can run `-with-conda`.
 
 ### Running more than one query in parallel
 
@@ -162,10 +175,10 @@ pipeline, use the `-latest` flag.
 nextflow run scbirlab/nf-ggi -latest
 ```
 
-If you want to run a particular tagged version of the pipeline, such as `v0.0.2`, you can do so using
+If you want to run a particular tagged version of the pipeline, such as `v0.0.3`, you can do so using
 
 ```bash 
-nextflow run scbirlab/nf-ggi -r v0.0.2
+nextflow run scbirlab/nf-ggi -r v0.0.3
 ```
 
 For help, use `nextflow run scbirlab/nf-ggi --help`.
@@ -181,13 +194,20 @@ The pipeline can be run with command-line arguments:
 
 ```bash
 # intra-species all-vs-all:
-nextflow run scbirlab/nf-ggi --uniclust <path> --bfd <path> --organism_id <taxon ID>
+nextflow run scbirlab/nf-ggi --uniclust <path> --bfd <path> \
+    --organism_id <taxon ID>
 # intra-species all-vs-1:
-nextflow run scbirlab/nf-ggi --uniclust <path> --bfd <path> --organism_id <taxon ID> --bait <UniProtID>
+nextflow run scbirlab/nf-ggi --uniclust <path> --bfd <path> \
+    --organism_id <taxon ID> --bait <UniProtID>
 # inter-species all-vs-all:
-nextflow run scbirlab/nf-ggi --uniclust <path> --bfd <path> --organism_id <taxon ID> --bait <taxon ID> --bait_is_taxon --interspecies
+nextflow run scbirlab/nf-ggi --uniclust <path> --bfd <path> \
+    --organism_id <taxon ID> --bait <taxon ID> \
+    --bait_is_taxon --interspecies
 # custom list of pairs:
-nextflow run scbirlab/nf-ggi --uniclust <path> --bfd <path> --organism_id <taxon ID> --filename <path> --column1 <gene-col1> --column2 <gene-col2> [--interspecies --organism_id2 <taxon ID>] [--format <gene-name-type>]
+nextflow run scbirlab/nf-ggi --uniclust <path> --bfd <path> \
+    --organism_id <taxon ID> \
+    --filename <path> --column1 <gene-col1> --column2 <gene-col2> \
+    [--interspecies --organism_id2 <taxon ID>] [--format <gene-name-type>]
 ```
 
 The following parameters are **required**:
@@ -205,6 +225,10 @@ The following parameters are **optional**. They have default values which can
  be overridden if necessary.
 
  ```bash
+ --reviewed      Only pull SwissProt reviewed proteins from proteome
+--isoforms       Additionally pull isoform sequences from proteome
+--proteome_opts  Additonal filters for pulling from proteome. Check 
+            https://www.ebi.ac.uk/proteins/api/doc/#!/proteins/search for options.
 --bait_is_taxon  Indicate that bait is an organism ID
 --interspecies   Run analysis between interacting species proteomes
 --plots          Generate contact map plots
@@ -237,16 +261,16 @@ The `proteome_name` column is not neccesary, but you can add extra columns with 
 
 If running with `mode = "bait"`, to do a pulldown against a single bait protein, add another column with the bait UniProt ID.
 
-| organism_id | proteome_name           | bait   | bait_name |
-| ----------- | ----------------------- | ------ | --------- |
-| 243273      | "Mycoplasma genitalium" | P47259 | FolD      |
+| organism_id | proteome_name         | bait   | bait_name |
+| ----------- | --------------------- | ------ | --------- |
+| 243273      | Mycoplasma genitalium | P47259 | FolD      |
 
 
 If running with `mode = "custom"`, to do a pulldown against a single bait protein, add another column with the bait UniProt ID.
 
-| organism_id | proteome_name              | format    | filename  | column1 | column2 |
-| ----------- | -------------------------- | --------- | --------- | -------- | -------- |
-| 559292      | "Saccharomyces cerevisiae" | Gene_Name | combos.csv | query_orf | array_orf |
+| organism_id | proteome_name            | format    | filename  | column1    | column2   |
+| ----------- | ------------------------ | --------- | --------- | ---------- | --------- |
+| 559292      | Saccharomyces cerevisiae | Gene_Name | combos.csv | query_orf | array_orf |
 
 In this case, `combos.csv` must be in the `inputs` folder defined above. It would look like:
 

@@ -3,8 +3,8 @@ process make_msa_from_fasta {
    tag "${id}"
    label 'big_cpu_mem'
    
-   errorStrategy 'retry'
-   maxRetries 2
+   // errorStrategy 'retry'
+   // maxRetries 2
 
    publishDir( 
       "${params.outputs}/msa", 
@@ -15,8 +15,8 @@ process make_msa_from_fasta {
    // Proteome ID, UniProtID, FASTA file, uniclust, bfd
    input:
    tuple val( id ), file( fasta )
-   val uniclust 
-   val bfd 
+   tuple val( uniclust_root ), path( uniclust ) 
+   tuple val( bfd_root ), path( bfd )
 
    output:
    tuple val( id ), file ( 'msa.a3m' )
@@ -25,7 +25,7 @@ process make_msa_from_fasta {
    script:
    """
    set -x
-   dbs=(${uniclust} ${bfd})
+   dbs=(${uniclust_root} ${bfd_root})
    for d in \${dbs[@]}
    do
    hhblits \

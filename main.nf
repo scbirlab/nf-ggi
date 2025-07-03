@@ -43,6 +43,9 @@ if ( params.help ) {
                --column1, --column2   Column names from --filename to get protein IDs
 
          Command-line optional parameters:
+            --reviewed       Only pull SwissProt reviewed proteins from proteome
+            --isoforms       Additionally pull isoform sequences from proteome
+            --proteome_opts  Additonal filters for pulling from proteome. Check https://www.ebi.ac.uk/proteins/api/doc/#!/proteins/search for options.
             --bait_is_taxon  Indicate that bait is an organism ID
             --interspecies   Run analysis between interacting species proteomes
             --organism_id2   When providing a file of pairs, if the second protein (--column2) is from another organism than the first
@@ -112,6 +115,10 @@ log.info pipeline_title + """\
    mode                    : ${params.mode}
       Bait is Taxon ID     : ${params.bait_is_taxon}
       Interspecies         : ${params.interspecies}
+   proteome options
+      Reviewed             : ${params.reviewed}
+      Isoforms             : ${params.isoforms}
+      Other options        : ${params.proteome_opts}
    inputs
       input_dir            : ${params.inputs}
       sample sheet         : ${params.sample_sheet}
@@ -150,8 +157,8 @@ include {
    fetch_string_database;
 } from './modules/string.nf'
 include { 
-   fetch_fastas_from_organism_id;
-   fetch_fastas_from_organism_id as fetch_fastas_from_organism_id_bait;
+   fetch_fastas_from_organism_id_v3 as fetch_fastas_from_organism_id;
+   fetch_fastas_from_organism_id_v3 as fetch_fastas_from_organism_id_bait;
    fetch_fasta_from_uniprot_id;
    fetch_fastas_from_uniprot_ids;
    map_uniprot_ids_from_file;
@@ -172,8 +179,14 @@ include {
 
 workflow {
 
-   Channel.value( params.bfd ).set { bfd }
-   Channel.value( params.uniclust ).set { uniclust }
+   Channel.value( tuple(
+      file( params.bfd ).getName(),
+      file( "${params.bfd}_*", checkIfExists: true ),
+   ) ).set { bfd }
+   Channel.value( tuple(
+      file( params.uniclust ).getName(),
+      file( "${params.uniclust}{_,.}*", checkIfExists: true ),
+   ) ).set { uniclust }
    Channel.of( params.rhea_url ).set { rhea_url }
 
    if ( params.sample_sheet ) {
@@ -217,10 +230,14 @@ workflow {
 
    if ( mode == 'self' || mode == 'bait' ) {
 
-      sample_rows
-         .map { tuple( it.organism_id, it.organism_id ) }
-         .unique()
-         | fetch_fastas_from_organism_id  // Organism ID, FASTAs gz
+      fetch_fastas_from_organism_id(
+         sample_rows
+            .map { tuple( it.organism_id, it.organism_id ) }
+            .unique(),
+         Channel.value(params.isoforms),
+         Channel.value(params.reviewed),
+         Channel.value(params.proteome_opts),
+      )  // Organism ID, FASTAs gz
       fetch_fastas_from_organism_id.out
          .splitFasta( elem: 1, record: [id: true, text: true] )  // Organism ID, FASTA text
          .map { [ it[0] ] + it[1].id.split('\\|')[1..2] + [ it[1].text ] }  // Organism ID, UniProtID, Entry Name, FASTA text
@@ -244,8 +261,13 @@ workflow {
 
          if ( params.bait_is_taxon ) {
 
-            baits
-               | fetch_fastas_from_organism_id_bait  // Organism ID, bait FASTAs gz
+            fetch_fastas_from_organism_id_bait(
+               baits,
+               Channel.value(params.isoforms),
+               Channel.value(params.reviewed),
+               Channel.value(params.proteome_opts),
+            )  // Organism ID, bait FASTAs gz
+
             fetch_fastas_from_organism_id_bait.out
                .set { bait_fastas }
 

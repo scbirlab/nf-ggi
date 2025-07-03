@@ -43,6 +43,135 @@ process fetch_fastas_from_organism_id {
 }
 
 
+process fetch_fastas_from_organism_id_v2 {
+
+   tag "${id}"
+
+   publishDir( 
+      "${params.outputs}/sequences", 
+      mode: 'copy',
+      saveAs: { "${id}-${organism_id}.fasta.gz" }
+   )
+
+   input:
+   tuple val( id ), val( organism_id )
+   val isoforms
+   val reviewed
+   val extras
+
+   output:
+   tuple val( id ), path( "proteome.fasta.gz" )
+
+   script:
+   def extra_params = extras ? "&${extras}" : ""
+   def isoform_param = isoforms ? "&isoform=2" : "&isoform=0"
+   def reviewed_param = reviewed ? "&reviewed=true" : ""
+   """
+   set -x
+   EBI_API_URL='https://www.ebi.ac.uk/proteins/api/proteins?'
+   COMMON_PARAMS='offset=0&size=-1${reviewed_param}${isoform_param}${extra_params}'
+   curl -X GET --header 'Accept:text/x-fasta' \
+      "\$EBI_API_URL""\$COMMON_PARAMS"'&taxid=${organism_id}' \
+   | gzip --best \
+   > proteome.fasta.gz
+   """
+}
+
+
+process fetch_fastas_from_organism_id_v3 {
+
+   tag "${id}:${organism_id}"
+
+   publishDir( 
+      "${params.outputs}/sequences", 
+      mode: 'copy',
+      saveAs: { "${id}-${organism_id}.fasta.gz" }
+   )
+
+   input:
+   tuple val( id ), val( organism_id )
+   val isoforms
+   val reviewed
+   val extras
+
+   output:
+   tuple val( id ), path( "proteome.fasta.gz" )
+
+   script:
+   def extra_params = extras ? "&${extras}" : ""
+   def isoform_param = isoforms ? "&isoform=2" : "&isoform=0"
+   def reviewed_param = reviewed ? "&reviewed=true" : ""
+   """
+   set -x
+   EBI_API_URL='https://www.ebi.ac.uk/proteins/api'
+   COMMON_PARAMS='offset=0&size=-1'
+   PROTEIN_PARAMS='${reviewed_param}${isoform_param}${extra_params}'
+
+   function get_proteome_id() (
+      curl -s "https://rest.uniprot.org/proteomes/search?query=(organism_id:${organism_id})&format=json" \
+      | jq -r '
+         .results[]
+         | select(.proteomeType == "'"\$1"' proteome")
+         | .id
+      ' \
+      | head -n1
+   )
+   QUERIES=("Reference and representative" "Reference" "Representative" "Other")
+   PROTEOME_ID=
+   for q in "\${QUERIES[@]}"
+   do
+      PROTEOME_ID=\$(get_proteome_id "\$q")
+      if [ ! -z \$PROTEOME_ID ]
+      then 
+         break
+      fi
+   done
+
+   if [ -z \$PROTEOME_ID ]
+   then 
+      echo "Could not find any UniProt proteomes for taxon ${organism_id}!"
+      echo " - Try ""https://rest.uniprot.org/proteomes/search?query=(organism_id:${organism_id})&format=json"
+   fi
+
+   curl -X GET --header 'Accept:application/json' \
+      "\$EBI_API_URL"'/genecentric?'"\$COMMON_PARAMS"'&upid='"\$PROTEOME_ID" \
+      | jq -r '.[] | .gene | .accession' \
+   > uniprot-ids.txt
+
+   if [ ! -s "uniprot-ids.txt" ]
+   then
+      echo "Could not find any gene-centric UniProt accessions for taxon ${organism_id}, proteome ID \$PROTEOME_ID!"
+      echo " - Try ""\$EBI_API_URL"'/genecentric?'"\$COMMON_PARAMS"'&upid='"\$(head -n1 proteome-id.txt)"
+      echo "Falling back to UniProt API"
+
+      curl 'https://rest.uniprot.org/uniprotkb/stream?query=(proteome:'"\$PROTEOME_ID"')&format=list&download=true' \
+      > uniprot-ids.txt
+
+      if [ ! -s "uniprot-ids.txt" ]
+      then
+         echo "Could not find any UniProt accessions for taxon ${organism_id}, proteome ID \$PROTEOME_ID!"
+         echo " - Try "'https://rest.uniprot.org/uniprotkb/stream?query=(proteome:'"\$PROTEOME_ID"')&format=list&download=true'
+         exit 1
+      fi
+   fi
+
+   split -l 100 uniprot-ids.txt 'chunk_'
+   chunks=(chunk_*)
+   for chunk in \${chunks[@]}
+   do
+      ids=\$(tr '\\n' ',' < "\$chunk")
+
+      curl -X GET --header 'Accept:text/x-fasta' \
+         "\$EBI_API_URL"'/proteins?'"\$COMMON_PARAMS""\$PROTEIN_PARAMS"'&taxid='"${organism_id}"'&accession='"\$ids" \
+      >> proteome.fasta
+   done
+   
+   gzip --best proteome.fasta
+
+   """
+}
+
+
 process fetch_fasta_from_uniprot_id {
 
    tag "${uniprot_id}"
