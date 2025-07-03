@@ -22,11 +22,13 @@
 
 ## Processing steps
 
-1. Download Rhea DB (of metabolites) in preparation for searching.
+**scbirlab/nf-ggi** carries out the following steps:
+
+1. [Optional] Download Rhea DB (of metabolites) in preparation for searching.
 
 For proteins or proteomes in the [sample sheet](#sample-sheet):
 
-1. Download its STRING database and tidy up the data.
+1. [Optional] Download its STRING database and tidy up the data.
 2. Download FASTA sequences of proteins from UniProt
     - If multiple proteomes are available, choose according to this priority: "Reference and representative", "Reference", "Representative", "Other"
 3. Find reactions in Rhea DB and connect products with reactants between enzymes in the proteome.
@@ -47,15 +49,15 @@ For `method == "custom"`:
 
 5. All unique pairs of proteins listed.
 
-Then for each protein pair, optionally:
+Then for each protein pair, **optionally**:
 
-6. Calculate the co-evolutionary signal with DCA, optionally generating plots of contact maps.
-7. Predict the interface contact map with `yunta rf2t` (RosettaFold-2track), optionally generating plots of contact maps.
-8. Predict the protein-protein complex structure map with `yunta af2` (AlphaFold2), optionally generating plots of contact maps.
+6. with `--dca`: Calculate the co-evolutionary signal with DCA, optionally generating plots of contact maps.
+7. with `--rf2t`: Predict the interface contact map with `yunta rf2t` (RosettaFold-2track), optionally generating plots of contact maps.
+8. with `--af2`: Predict the protein-protein complex structure map with `yunta af2` (AlphaFold2), optionally generating plots of contact maps.
 
 ## Requirements
 
-You need access to the UniClust and BFD databases, and you need Nextflow and conda to be installed.
+You need access to the UniClust and BFD databases, and you need Nextflow and either conda, Singularity, or Docker to be installed.
 
 ### Databases
 
@@ -107,9 +109,9 @@ source ~/.bash_profile
 
 There are three run modes for the pipeline:
 
-- "self": run all protein-protein interactions within an organism
-- "bait": run interactions between all proteins from an organism and either one protein or another organism's proteome
-- "custom": run specified protein pairs from a file
+- `"self"`: run all protein-protein interactions within an organism
+- `"bait"`: run interactions between all proteins from an organism and either one protein or another organism's proteome
+- `"custom"`: run specified protein pairs from a file
 
 The easiest way to get going is by specifying parameters on the command-line:
 
@@ -125,11 +127,12 @@ nextflow run scbirlab/nf-ggi \
 Here's what the flags mean:
 - `--organism_id`: The Taxon ID of the organism, whih you can find at NCBI or UniProt
 - `--dca`, `--rf2t`: Run direct-coupling analysis and RosettaFold-2track
-- `--plots`: Generate amino acid contact maps. This takes about 10MB per protein-protein interaction, so be sure you have enough disk space!
+- `--plots`: Generate amino acid contact maps. This takes about 10MB per protein-protein interaction, 
+so be sure you have enough disk space for the number of protein-protein pairs you're testing!
 
-You could also run `--metabolites` to get the metabolic network, and `--string` to get the STRING co-expression network.
+You can also run `--metabolites` to get the metabolic network, and `--string` to get the STRING co-expression network.
 
-Because only `--organism_id` is provided, the pipeline assumes "self" mode (i.e. all-vs-all within taxon 243273).
+Because only `--organism_id` was provided, the pipeline assumes "self" mode (i.e. all-vs-all within taxon 243273).
 
 You can run bait mode by providing `--bait <UniProt ID>`:
 
@@ -147,6 +150,11 @@ nextflow run scbirlab/nf-ggi --bfd "$bfd" --uniclust "$uniclust" \
     --bait_is_taxon --interspecies \
     --rf2t
 ```
+
+### Running with Singularity, Docker, or Conda
+
+**scbirlab/nf-ggi** runs on a Singularity container engine by default to ensure software versions are consistent. If you have 
+docker installed, you can run using `-with-docker` to use it instead, or if you have Conda you can run `-with-conda`.
 
 ### Running more than one query in parallel
 
@@ -167,10 +175,10 @@ pipeline, use the `-latest` flag.
 nextflow run scbirlab/nf-ggi -latest
 ```
 
-If you want to run a particular tagged version of the pipeline, such as `v0.0.2`, you can do so using
+If you want to run a particular tagged version of the pipeline, such as `v0.0.3`, you can do so using
 
 ```bash 
-nextflow run scbirlab/nf-ggi -r v0.0.2
+nextflow run scbirlab/nf-ggi -r v0.0.3
 ```
 
 For help, use `nextflow run scbirlab/nf-ggi --help`.
