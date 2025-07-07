@@ -1,5 +1,9 @@
 FROM mambaorg/micromamba:1.5.6
 
+ENV HOME=/home/micromamba
+ENV MAMBA_ROOT_PREFIX=/opt/conda
+WORKDIR $HOME
+
 USER root
 RUN echo "user:x:1001:1001::/home/user:/bin/bash" >> /etc/passwd && \
     mkdir -p /home/user && chown -R 1001:1001 /home/user
