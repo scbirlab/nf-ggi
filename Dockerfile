@@ -18,7 +18,6 @@ RUN eval "$(micromamba shell hook --shell bash)" && \
     micromamba activate env && \
     python -c 'from rf2t_micro.weights import get_model_weights; get_model_weights()' && \
     python -c 'from yunta.weights import get_model_weights; get_model_weights()' && \
-    python -c 'from yunta.interaction_utils import organism_interactions; organism_interactions()' && \
     micromamba deactivate
 
 ENV PATH=/opt/conda/envs/env/bin:$PATH
