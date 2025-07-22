@@ -175,10 +175,10 @@ pipeline, use the `-latest` flag.
 nextflow run scbirlab/nf-ggi -latest
 ```
 
-If you want to run a particular tagged version of the pipeline, such as `v0.0.3`, you can do so using
+If you want to run a particular tagged version of the pipeline, such as `v0.0.4`, you can do so using
 
 ```bash 
-nextflow run scbirlab/nf-ggi -r v0.0.3
+nextflow run scbirlab/nf-ggi -r v0.0.4
 ```
 
 For help, use `nextflow run scbirlab/nf-ggi --help`.
