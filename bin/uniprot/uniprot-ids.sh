@@ -105,9 +105,10 @@ do
             | jq -r '
                 .results
                 | group_by(.from)[]
-                | . as $group
-                | ($group[] | select(.to.entryType | test("reviewed")) | .to.primaryAccession) // 
-                    ($group[] | select(.to.entryType | test("unreviewed")) | .to.primaryAccession)
+                | (
+                    (map(select(.to.entryType | test("reviewed")) | .to.primaryAccession) | first)
+                    // (map(select(.to.entryType | test("unreviewed")) | .to.primaryAccession) | first)
+                )
             ') \
     >> "$tempfile"
 
