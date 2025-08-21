@@ -10,7 +10,7 @@ ORGANISM_ID=${6:-"Placeholder Organism ID"}
 # Produces file called "uniprot-ids.txt"
 # requires jq
 
-tempfile="$(date)-uniprot-temp.csv"
+tempfile="uniprot-temp.csv"
 uniprot_url='https://rest.uniprot.org/idmapping'
 if [ "$FROM" == "UniProtKB" ]
 then
@@ -24,17 +24,20 @@ get_job_status () (
         | jq -r '.["jobStatus"]'
 )
 
-set -e
-set -x
+set -euox pipefail
 
 if [[ "$FILENAME" == *.csv ]]
 then 
     sep=,
+    clean_file="clean-input.csv"
 else
-    sep=$'\\t'
+    sep=$'\t'
+    clean_file="clean-input.tsv"
 fi
 
-if [ "$(head -n1 "$FILENAME" | grep -c "$COLUMN")" -lt 1 ]
+sed '1s/^\xEF\xBB\xBF//' "$FILENAME" | tr -d $'\r' > "$clean_file"
+
+if [ "$(head -n1 "$clean_file" | grep -c "$COLUMN")" -lt 1 ]
 then
     echo "Column $COLUMN not in $FILENAME!"
     exit 1
@@ -46,7 +49,7 @@ awk -F"$sep" \
     NR == 1 { for (i = 1; i <= NF; i++) if ( $i == column ) column_number = i } 
     NR > 1 { print $column_number }
     ' \
-    "$FILENAME" \
+    "$clean_file" \
 | sort -u \
 | split -l 25 - name-chunk_
 
@@ -98,8 +101,15 @@ do
 
     echo "Job ready: $job_id"
     paste -d, "$chunk" \
-        <(curl -s "$uniprot_url/stream/$job_id" \
-            | jq -r '.["results"][]["to"]') \
+        <(curl -s "$uniprot_url""/uniprotkb/results/""$job_id""?fields=accession" \
+            | jq -r '
+                .results
+                | group_by(.from)[]
+                | (
+                    (map(select(.to.entryType | test("reviewed")) | .to.primaryAccession) | first)
+                    // (map(select(.to.entryType | test("unreviewed")) | .to.primaryAccession) | first)
+                )
+            ') \
     >> "$tempfile"
 
 done
@@ -116,4 +126,4 @@ then
     exit 1
 fi
 
-grep -v '^\$' "$tempfile" > "$OUTPUT"
+grep -v '^$' "$tempfile" > "$OUTPUT"

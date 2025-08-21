@@ -232,12 +232,12 @@ process fetch_fastas_from_uniprot_ids {
 
 process map_uniprot_ids_from_file {
 
-   tag "${id}-${column}:${from_type}"
+   tag "${id}-${organism_id}-${column}:${from_type}"
 
    publishDir( 
       "${params.outputs}/uniprot_map", 
       mode: 'copy',
-      saveAs: { "${id}-${column}.txt" },
+      saveAs: { "${id}-${organism_id}-${column}.txt" },
    )
 
    input:
