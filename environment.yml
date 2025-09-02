@@ -3,6 +3,7 @@ name: nf-ggi
 channels:
     - conda-forge
     - bioconda
+    - nvidia
 
 dependencies:
     - python==3.12
@@ -13,7 +14,11 @@ dependencies:
     - conda-forge::jq
     - conda-forge::rdkit
     - conda-forge::wget
+    - nvidia::cuda-nvcc
+    - nvidia::cuda-nvtx
+    - nvidia::cuda-cupti
     - pip:
         - "pandas"
         - "yunta[cuda12]>=0.0.6.post2"
+        - "jax[cuda12]==0.4.35"
         
