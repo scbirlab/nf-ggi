@@ -14,9 +14,6 @@ dependencies:
     - conda-forge::jq
     - conda-forge::rdkit
     - conda-forge::wget
-    - nvidia/label/cuda-12.3.2::cuda-nvcc
-    - nvidia/label/cuda-12.3.2::cuda-nvtx
-    - nvidia/label/cuda-12.3.2::cuda-cupti
     - pip:
         - "pandas"
         - "yunta[cuda12]>=0.0.6.post2"
