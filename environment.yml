@@ -16,7 +16,7 @@ dependencies:
     - conda-forge::wget
     - pip:
         - "pandas"
-        - "yunta[cuda12]>=0.0.7"
+        - "yunta[af_cuda12,rf2t]>=0.0.7"
         - "jax[cuda12]==0.4.35"
         - nvidia-cuda-runtime-cu12==12.3.101
         - nvidia-cuda-nvrtc-cu12==12.3.101
