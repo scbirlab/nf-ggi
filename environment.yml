@@ -16,6 +16,15 @@ dependencies:
     - conda-forge::wget
     - pip:
         - "pandas"
-        - "yunta[cuda12]>=0.0.6.post2"
+        - "yunta[cuda12]>=0.0.7"
         - "jax[cuda12]==0.4.35"
+        - nvidia-cuda-runtime-cu12==12.3.101
+        - nvidia-cuda-nvrtc-cu12==12.3.101
+        - nvidia-cublas-cu12==12.3.4.1
+        - nvidia-cudnn-cu12==9.1.0.70
+        - nvidia-cufft-cu12==11.0.12.1
+        - nvidia-curand-cu12==10.3.4.107
+        - nvidia-cusolver-cu12==11.5.2.107
+        - nvidia-cusparse-cu12==12.2.0.103
+        - --extra-index-url https://pypi.ngc.nvidia.com
         
