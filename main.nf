@@ -147,7 +147,7 @@ log.info pipeline_title + """\
 // load modules
 include {
    make_msa_from_fasta;
-   make_msa_from_fasta as make_msa_from_fasta_bait;
+   Make_msa_from_fasta_with_MMSeqs2;
 } from './modules/msa.nf'
 include {
    fetch_rhea_database;
@@ -176,6 +176,14 @@ include {
    stack_table as stack_af2;
 } from './modules/yunta.nf'
 // include { GENE_NAME_TO_UNIPROT as GENE_NAME_TO_UNIPROT } from './modules/uniprot.nf'
+
+
+def msaSeqLength(a3mFile) {
+    // First non-header line; strip a3m lowercase insertions for ungapped length
+    def seq = a3mFile.readLines().find { !it.startsWith('>') && it.trim() }
+    return seq ? seq.replaceAll('[a-z]', '').length() : 0
+}
+
 
 workflow {
 
@@ -419,11 +427,34 @@ workflow {
       .map { tuple( it.getSimpleName(), it ) }
       .unique()
       .set { input_for_making_msas }
-   make_msa_from_fasta(
-      input_for_making_msas,
-      uniclust,
-      bfd,
-   )
+   
+   if ( msa_method == "hhblits" ) {
+
+      make_msa_from_fasta(
+         input_for_making_msas,
+         uniclust,
+         bfd,
+      )
+         | set { msa_result }
+
+   }
+   else if ( msa_method == "mmseqs2" ) {
+
+      Make_msa_from_fasta_with_MMSeqs2(
+         input_for_making_msas,
+         uniclust,
+         bfd,
+         Channel.value( !params.cpu_only ),
+      )
+         | set { msa_result }
+
+   }
+   else {
+
+      error "--msa_method must be one of ''hhblits' (default) or 'mmseqs2'"
+
+   }
+   
    make_msa_from_fasta.out  // UniProtID, MSA
       .combine(
          id_to_uniprot_map,
@@ -477,15 +508,18 @@ workflow {
          sort: true,
       )  // Organism ID, Bait UniProt ID, Bait MSA, batch_i, [UniProtID, ...], [MSA, ...]
       .filter { it[-1].size() > 0 }  // filter out trivial (size-0) elements
+      .filter { v -> 
+         if ( !params.max_protein_length ) return true
+         def len = msaSeqLength( v[2] )
+         if ( len > params.max_protein_length ) {
+               //log.warn "Skipping ${v[0]}-${v[1]}: bait length ${len} > ${params.max_protein_length}"
+               return false
+         }
+         return true
+      }
       .set { msa_pairs0 }
-
-   if ( params.test ) {
-      msa_pairs0.take(2).set { msa_pairs }
-   }
-
-   else {
-      msa_pairs0.set { msa_pairs }
-   }
+   ( params.test ? msa_pairs0.take(2) : msa_pairs0 )
+      .set { msa_pairs }
 
    // Calculate evolutionary coupling
    Channel.value( params.bait_is_taxon || params.interspecies ).set { interspecies }
