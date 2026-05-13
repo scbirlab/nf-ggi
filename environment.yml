@@ -3,10 +3,9 @@ name: nf-ggi
 channels:
     - conda-forge
     - bioconda
-    - nvidia
 
 dependencies:
-    - python==3.13
+    - python==3.12
     - pip
     - bioconda::hhsuite
     - bioconda::mmseqs2
@@ -17,14 +16,5 @@ dependencies:
     - conda-forge::wget
     - pip:
         - "pandas"
-        - "yunta[af_cuda12,rf2t]>=0.0.7"
-        - nvidia-cuda-runtime-cu12>=12.3,<12.4
-        - nvidia-cuda-nvrtc-cu12>=12.3,<12.4
-        - nvidia-cublas-cu12>=12.3,<12.4
-        - nvidia-cudnn-cu12>=9.1
-        - nvidia-cufft-cu12>=11.0
-        - nvidia-curand-cu12>=10.3
-        - nvidia-cusolver-cu12>=11.5
-        - nvidia-cusparse-cu12>=12.2
-        - --extra-index-url https://pypi.ngc.nvidia.com
+        - "yunta[af_cuda12_local,rf2t]>=0.0.7"
         
