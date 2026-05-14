@@ -15,7 +15,7 @@ process run_dca {
    publishDir( 
       "${params.outputs}/interactions/dca/plots", 
       mode: 'copy',
-      saveAs: { "${id}-${uniprot_id_bait}-batch_${batch_idx}.${it.baseName}" },
+      saveAs: { "${id}-${uniprot_id_bait}-batch_${batch_idx}.${it}" },
       pattern: "plot-*"
    )
 
@@ -74,7 +74,7 @@ process run_rf2track {
    publishDir( 
       "${params.outputs}/interactions/rf2t/plots", 
       mode: 'copy',
-      saveAs: { "${id}-${uniprot_id_bait}-batch_${batch_idx}.${it.baseName}" },
+      saveAs: { "${id}-${uniprot_id_bait}-batch_${batch_idx}.${it}" },
       pattern: "plot-*"
    )
 
@@ -128,7 +128,7 @@ process run_af2 {
    publishDir( 
       "${params.outputs}/interactions/af2/pdb", 
       mode: 'copy',
-      saveAs: { "${id}-${uniprot_id_bait}-batch_${batch_idx}.${it.baseName}" },
+      saveAs: { "${id}-${uniprot_id_bait}-batch_${batch_idx}.${it}" },
       pattern: "af2/*.pdb"
    )
    publishDir( 
@@ -140,7 +140,7 @@ process run_af2 {
    publishDir( 
       "${params.outputs}/interactions/af2/plots", 
       mode: 'copy',
-      saveAs: { "${id}-${uniprot_id_bait}-batch_${batch_idx}.${it.baseName}" },
+      saveAs: { "${id}-${uniprot_id_bait}-batch_${batch_idx}.${it}" },
       pattern: "plot-*"
    )
 
