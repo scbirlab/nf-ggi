@@ -103,11 +103,28 @@ if ( !params.sample_sheet ) {
    }
 
 }
-if ( !params.uniclust ) {
-   throw new Exception("!!! PARAMETER MISSING: Please provide a path to UniClust database.")
+if ( params.msa_method == "hhblits" ) {
+
+   if ( !params.uniclust ) {
+      throw new Exception("!!! PARAMETER MISSING: Please provide a path to UniClust database for msa_method=${params.msa_method}.")
+   }
+   if ( !params.bfd ) {
+      throw new Exception("!!! PARAMETER MISSING: Please provide a path to BFD database for msa_method=${params.msa_method}.")
+   }
+
 }
-if ( !params.bfd ) {
-   throw new Exception("!!! PARAMETER MISSING: Please provide a path to BFD database.")
+else if ( params.msa_method == "mmseqs2" ) {
+
+   if ( !params.uniref30 ) {
+      throw new Exception("!!! PARAMETER MISSING: Please provide a path to uniref30 database for msa_method=${params.msa_method}.")
+   }
+   if ( !params.colabfold_envdb ) {
+      throw new Exception("!!! PARAMETER MISSING: Please provide a path to colabfold_envdb database for msa_method=${params.msa_method}.")
+   }
+
+}
+else {
+   throw new Exception("!!! PARAMETER ERROR: msa_method  was ${params.msa_method} but must be one of 'hhblits' (default) or 'mmseqs2'")
 }
 
 log.info pipeline_title + """\
@@ -187,14 +204,47 @@ def msaSeqLength(a3mFile) {
 
 workflow {
 
-   Channel.value( tuple(
-      file( params.bfd ).getName(),
-      file( "${params.bfd}_*", checkIfExists: true ),
-   ) ).set { bfd }
-   Channel.value( tuple(
-      file( params.uniclust ).getName(),
-      file( "${params.uniclust}{_,.}*", checkIfExists: true ),
-   ) ).set { uniclust }
+   if ( params.msa_method == "hhblits" ) {
+
+      Channel.value( tuple(
+         file( params.bfd ).getName(),
+         file( 
+            "${params.bfd}_*", 
+            checkIfExists: true,
+         ),
+      ) )
+         .set { db1 }
+      Channel.value( tuple(
+         file( params.uniclust ).getName(),
+         file( 
+            "${params.uniclust}{_,.}*", 
+            checkIfExists: true,
+         ),
+      ) )
+         .set { db2 }
+
+   }
+   else if ( params.msa_method == "mmseqs2" ) {
+
+      Channel.value( tuple(
+         file( params.uniref30 ).getName(),
+         file( 
+            "${params.uniref30}{_,.}*", 
+            checkIfExists: true,
+         ),
+      ) )
+         .set { db1 }
+      Channel.value( tuple(
+         file( params.colabfold_envdb ).getName(),
+         file( 
+            "${params.colabfold_envdb}{_,.}*", 
+            checkIfExists: true,
+         ),
+      ) )
+         .set { db2 }
+
+   }
+   
    Channel.of( params.rhea_url ).set { rhea_url }
 
    if ( params.sample_sheet ) {
@@ -428,22 +478,22 @@ workflow {
       .unique()
       .set { input_for_making_msas }
    
-   if ( msa_method == "hhblits" ) {
+   if ( params.msa_method == "hhblits" ) {
 
       make_msa_from_fasta(
          input_for_making_msas,
-         uniclust,
-         bfd,
+         db1,
+         db2,
       )
          | set { msa_result }
 
    }
-   else if ( msa_method == "mmseqs2" ) {
+   else if ( params.msa_method == "mmseqs2" ) {
 
       Make_msa_from_fasta_with_MMSeqs2(
          input_for_making_msas,
-         uniclust,
-         bfd,
+         db1,
+         db2,
          Channel.value( !params.cpu_only ),
       )
          | set { msa_result }
@@ -451,11 +501,11 @@ workflow {
    }
    else {
 
-      error "--msa_method must be one of ''hhblits' (default) or 'mmseqs2'"
+      error "msa_method was ${params.msa_method} but must be one of 'hhblits' (default) or 'mmseqs2'"
 
    }
    
-   make_msa_from_fasta.out  // UniProtID, MSA
+   msa_result  // UniProtID, MSA
       .combine(
          id_to_uniprot_map,
          by: 0,
