@@ -284,14 +284,15 @@ process stack_table_py {
    import pandas as pd
    
    files = glob("inputs/*.tsv")
-   df = pd.concat([pd.read_csv(f, sep="\\t") for f in files], axis=0)
-   (
-      df
-      .pivot(
-         columns=
-      )
-   )
-   df.sort_values(["method", "ID"]).to_csv("table.tsv", sep="\\t", index=False)
+   df = None
+   for f in files:
+      if df is None:
+         df = pd.read_csv(f, sep="\\t")
+         continue
+      else:
+         df = df.merge(pd.read_csv(f, sep="\\t"), how="outer")
+   
+   df.sort_values("ID").to_csv("table.tsv", sep="\\t", index=False)
    
    '
    """

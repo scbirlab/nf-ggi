@@ -65,8 +65,10 @@ process make_msa_from_fasta {
 process Make_msa_from_fasta_with_MMSeqs2 {
 
    tag "${id}"
-   label 'gpu_single_short'
-   container 'ghcr.io/soedinglab/mmseqs22:master-cuda12'
+   label 'big_cpu_mem'
+   // container 'ghcr.io/soedinglab/mmseqs2:latest'
+   // label 'gpu_single_short'
+   container 'ghcr.io/soedinglab/mmseqs2:master-cuda12'
 
    //  errorStrategy 'retry'  // sometimes cluster will kill the job
    // maxRetries 1
@@ -90,7 +92,7 @@ process Make_msa_from_fasta_with_MMSeqs2 {
    set -euox pipefail
 
    mmseqs createdb "${fasta}" queryDB
-   ${use_gpu ? "mmseqs makepaddedseqdb targetDB targetDB_gpu && mmseqs rmdb targetDB && mv targetDB_gpu targetDB" : ""}
+   #${use_gpu ? "mmseqs makepaddedseqdb targetDB targetDB_gpu && mmseqs rmdb targetDB && mv targetDB_gpu targetDB" : ""}
 
    dbs=(${uniref_root} ${bfd_root})
 
@@ -98,8 +100,8 @@ process Make_msa_from_fasta_with_MMSeqs2 {
    do
        name="\$(basename \$d)"
        mkdir -p "tmp_\$name"
-       ghcr.io/soedinglab/mmseqs search queryDB "\$d" "result_\$name" "tmp_\$name" \
-           ${use_gpu ? "--gpu 1" : ""} \
+       # TODO: Allow GPU usage
+       mmseqs search queryDB "\$d" "result_\$name" "tmp_\$name" \
            --threads ${task.cpus} \
            -e 0.001 \
            --num-iterations 3 \
