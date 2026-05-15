@@ -113,7 +113,7 @@ if ( params.msa_method == "hhblits" ) {
    }
 
 }
-else if ( params.msa_method == "mmseqs2" ) {
+else if ( params.msa_method == "mmseqs2" || params.msa_method == "colabfold" ) {
 
    if ( !params.uniref30 ) {
       throw new Exception("!!! PARAMETER MISSING: Please provide a path to uniref30 database for msa_method=${params.msa_method}.")
@@ -124,7 +124,7 @@ else if ( params.msa_method == "mmseqs2" ) {
 
 }
 else {
-   throw new Exception("!!! PARAMETER ERROR: msa_method  was ${params.msa_method} but must be one of 'hhblits' (default) or 'mmseqs2'")
+   throw new Exception("!!! PARAMETER ERROR: msa_method was '${params.msa_method}' but must be one of 'hhblits' (default) or 'mmseqs2' (or 'colabfold')")
 }
 
 log.info pipeline_title + """\
@@ -163,7 +163,7 @@ log.info pipeline_title + """\
 
 // load modules
 include {
-   make_msa_from_fasta;
+   HHblits_MSA;
    Colabfold_MSA;
 } from './modules/msa.nf'
 include {
@@ -204,6 +204,8 @@ def msaSeqLength(a3mFile) {
 
 workflow {
 
+   if ( params.msa_method == "mmseqs2" ) params.msa_method = "colabfold"
+
    if ( params.msa_method == "hhblits" ) {
 
       Channel.value( tuple(
@@ -224,7 +226,7 @@ workflow {
          .set { db2 }
 
    }
-   else if ( params.msa_method == "mmseqs2" ) {
+   else if ( params.msa_method == "mmseqs2" |  params.msa_method == "colabfold" ) {
 
       Channel.value( tuple(
          file( params.uniref30 ).getName(),
@@ -285,7 +287,6 @@ workflow {
 
    }
    
-
    if ( mode == 'self' || mode == 'bait' ) {
 
       fetch_fastas_from_organism_id(
@@ -472,17 +473,21 @@ workflow {
    }
 
    all_fasta_info
-      .map { tuple( it[1], it[3] ) }  // UniProtID, FASTA text
-      .collectFile( newLine: true ) { [ "${it[0]}.fasta", "${it[1]}" ] }
-      .map { tuple( it.getSimpleName(), it ) }
+      .map { v -> tuple( v[1], v[3] ) }  // UniProtID, FASTA text
       .unique()
+      .collectFile( newLine: true ) { [ "${it[0]}.fasta", "${it[1]}" ] }
+      .toSortedList()
+      .flatten()
+      .buffer( 
+         size: Math.min( params.batch_size, 100 ), 
+         remainder: true,
+      )
       .set { input_for_making_msas }
    
    if ( params.msa_method == "hhblits" ) {
 
-      make_msa_from_fasta(
-         input_for_making_msas
-         ,
+      HHblits_MSA(
+         input_for_making_msas,
          db1,
          db2,
       )
@@ -506,7 +511,9 @@ workflow {
 
    }
    
-   msa_result  // UniProtID, MSA
+   msa_result  // MSA files
+      .flatten()
+      .map { v -> tuple( v.simpleName, v ) }
       .combine(
          id_to_uniprot_map,
          by: 0,

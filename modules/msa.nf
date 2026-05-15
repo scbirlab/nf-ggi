@@ -1,43 +1,44 @@
-process make_msa_from_fasta {
+process HHblits_MSA {
 
-   tag "${id}"
+   tag "${fasta[0]}...${fasta[-1]}"
    label 'big_cpu_mem'
    
    errorStrategy 'retry'  // sometimes cluster will kill the job
    maxRetries 1
 
    publishDir( 
-      "${params.outputs}/msa", 
+      "${params.outputs}/msa/hhblits", 
       mode: 'copy',
-      saveAs: { "${fasta.getSimpleName()}.a3m" }
+      // saveAs: { "${fasta.simpleName}.a3m" }
    )
 
    // Proteome ID, UniProtID, FASTA file, uniclust, bfd
    input:
-   tuple val( id ), file( fasta )
+   path( fasta )
    tuple val( uniclust_root ), path( uniclust ) 
    tuple val( bfd_root ), path( bfd )
 
    output:
-   tuple val( id ), file ( 'msa.a3m' )
+   path( "*.a3m" )
    // tuple val( fasta.getSimpleName() ), path( "*.a3m" )
 
    script:
+   def mem_per_job = (task.memory.getGiga() / task.cpus).toInteger()
    """
-   set -x
-   dbs=(${uniclust_root} ${bfd_root})
-   for d in \${dbs[@]}
+   set -euox pipefail
+
+   dbs=("${uniclust_root}" "${bfd_root}")
+   for db in \${dbs[@]}
    do
       parallel -j ${task.cpus} \
          "hhblits \
-            -cpu ${task.cpus} \
-            -maxmem ${task.memory.getGiga()} \
+            -cpu 1 \
+            -maxmem ${mem_per_job} \
             -v 2 \
             -i {} \
-            -d \$d \
+            -d \$db \
             -e 0.001 \
-            -o /dev/null \
-            -oa3m {.}.""\$(basename \$d)"".a3m \
+            -oa3m {.}.""\$(basename \$db)"".out.a3m \
             -o /dev/null \
             -cov 60 \
             -n 3 \
@@ -45,29 +46,32 @@ process make_msa_from_fasta {
       ::: *.fasta
    done
 
-   outputs=( *.a3m )
-   # concatenate from both databases
-   cat <(head -n2 \${outputs[0]}) <(tail -n+3 -q \${outputs[@]}) \
-      > "msa.a3m"
-   for f in \${outputs[@]}
+   # Per-sequence merge: uniclust header + homologs from both DBs
+   for f in *.fasta
    do
-      if [ \$f != "msa.a3m" ]
-      then
-         rm \$f
-      fi
+      base="\${f%.fasta}"
+      outputs=( "\${base}".*.out.a3m )
+      # concatenate from both databases
+      cat <(head -n2 \${outputs[0]}) <(tail -n+3 -q \${outputs[@]}) \
+         > "\${base}.a3m"
+      rm \${outputs[@]}
    done
    """
 
    stub:
    """
-   head -n2 ${fasta} > "msa.a3m"
+   for f in *.fasta
+   do
+      base="\${f%.fasta}"
+      head -n2 "\$f" > "\${base}.a3m"
+   done
    """
 }
 
 
 process Colabfold_MSA {
 
-   tag "${id}"
+   tag "${fasta[0]}...${fasta[-1]}"
    label 'big_cpu_mem'
    // container 'ghcr.io/soedinglab/mmseqs2:latest'
    // label 'gpu_single_short'
@@ -77,19 +81,19 @@ process Colabfold_MSA {
    // maxRetries 1
 
    publishDir(
-        "${params.outputs}/msa",
+        "${params.outputs}/msa/colabfold",
         mode: 'copy',
-        saveAs: { "${fasta.simpleName}.a3m" }
+      //   saveAs: { "${fasta.simpleName}.a3m" }
    )
 
    input:
-   tuple val( id ), file( fasta )
+   path( fasta )
    tuple val( uniref_root ), path( uniref )
    tuple val( env_root ), path( bfd )
    val use_gpu
 
    output:
-   tuple val( id ), file( '*.a3m' )
+   path( '*.a3m' )
 
    script:
    // TODO: Allow GPU usage. Might need to have special databases.
@@ -101,7 +105,7 @@ process Colabfold_MSA {
 
    BASE_FLAGS="--db-load-mode 2 --threads ${task.cpus}"
 
-   mmseqs createdb "${fasta}" query
+   mmseqs createdb *.fasta query
 
    dbs=("${uniref_root}" "${env_root}")
    for db in \${dbs[@]}
@@ -115,9 +119,8 @@ process Colabfold_MSA {
       fi
 
       mmseqs search "\$QUERY" "\$db" result_"\$db" tmp_"\$db" \
-         --threads ${task.cpus} \
+         \$BASE_FLAGS \
          --num-iterations 3 \
-         --db-load-mode 2 \
          --prefilter-mode 0 \
          -a \
          -e 0.1 \
@@ -133,9 +136,9 @@ process Colabfold_MSA {
          EXPAND_FLAGS="--expand-filter-clusters 1 --max-seq-id 0.95"
          ALIGN_QUERY="prof_result_uniref"
       else
-         EXPAND_QUERY=tmp_"\$db"/latest/profile_1
+         EXPAND_QUERY=prof_result_uniref
          EXPAND_FLAGS=""
-         ALIGN_QUERY=tmp_"\$db"/latest/profile_1"
+         ALIGN_QUERY=tmp_"\$db"/latest/profile_1
       fi
 
       # Expand: fetch all cluster members for matched representatives
@@ -187,8 +190,24 @@ process Colabfold_MSA {
       mmseqs rmdb "\$f"
    done
 
-   mmseqs unpackdb msa.a3m . --unpack-name-mode 1 --unpack-suffix .a3m
+   mmseqs unpackdb msa.a3m . --unpack-name-mode 1 --unpack-suffix .temp.a3m
    mmseqs rmdb msa.a3m
+   # strip db prefix and description, keep bare accession
+   for f in *.temp.a3m
+   do
+      header=\$(head -n1 "\$f")
+      acc=\$(
+         echo "\$header" \
+         | awk '
+            {
+               id = substr(\$1, 2)
+               n = split(id, a, "|")
+               print (n >= 3) ? a[2] : a[1]
+            }
+         '
+      )
+      [[ -n "\$acc" ]] && mv "\$f" "\${acc}.a3m"
+   done
 
    mmseqs rmdb prof_result_uniref
    mmseqs rmdb prof_result_uniref_h
@@ -197,6 +216,10 @@ process Colabfold_MSA {
    """
    stub:
    """
-   head -n2 "${fasta}" > "msa.a3m"
+   for f in *.fasta
+   do
+      base="\${f%.fasta}"
+      head -n2 "\$f" > "\${base}.a3m"
+   done
    """
 }

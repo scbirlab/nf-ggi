@@ -279,7 +279,7 @@ process stack_table_py {
 
    script:
    """
-   #/usr/bin/env python
+   #!/usr/bin/env python
    from glob import glob
    import pandas as pd
    
