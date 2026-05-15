@@ -294,6 +294,5 @@ process stack_table_py {
    
    df.sort_values("ID").to_csv("table.tsv", sep="\\t", index=False)
    
-   '
    """
 }

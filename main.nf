@@ -164,7 +164,7 @@ log.info pipeline_title + """\
 // load modules
 include {
    make_msa_from_fasta;
-   Make_msa_from_fasta_with_MMSeqs2;
+   Colabfold_MSA;
 } from './modules/msa.nf'
 include {
    fetch_rhea_database;
@@ -481,16 +481,17 @@ workflow {
    if ( params.msa_method == "hhblits" ) {
 
       make_msa_from_fasta(
-         input_for_making_msas,
+         input_for_making_msas
+         ,
          db1,
          db2,
       )
          | set { msa_result }
 
    }
-   else if ( params.msa_method == "mmseqs2" ) {
+   else if ( params.msa_method == "mmseqs2" ||  params.msa_method == "colabfold" ) {
 
-      Make_msa_from_fasta_with_MMSeqs2(
+      Colabfold_MSA(
          input_for_making_msas,
          db1,
          db2,
@@ -501,7 +502,7 @@ workflow {
    }
    else {
 
-      error "msa_method was ${params.msa_method} but must be one of 'hhblits' (default) or 'mmseqs2'"
+      error "msa_method was ${params.msa_method} but must be one of 'hhblits' (default) or 'mmseqs2' (or 'colabfold')"
 
    }
    

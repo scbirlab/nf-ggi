@@ -16,5 +16,5 @@ dependencies:
     - conda-forge::wget
     - pip:
         - "pandas"
-        - "yunta[af_cuda12_local,rf2t]>=0.1.0"
+        - "yunta[af_cuda12_local,rf2t]>=0.1.1"
         
