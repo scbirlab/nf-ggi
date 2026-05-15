@@ -12,6 +12,7 @@ dependencies:
     - conda-forge::ca-certificates
     - conda-forge::curl
     - conda-forge::jq
+    - conda-forge::parallel
     - conda-forge::rdkit
     - conda-forge::wget
     - pip:
