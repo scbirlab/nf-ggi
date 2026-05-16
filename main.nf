@@ -165,6 +165,7 @@ log.info pipeline_title + """\
 include {
    HHblits_MSA;
    Colabfold_MSA;
+   Convert_FASTA_to_A3M;
 } from './modules/msa.nf'
 include {
    fetch_rhea_database;
@@ -187,11 +188,13 @@ include {
    run_dca;
    run_rf2track;
    run_af2;
-   stack_table_py;
-   stack_table as stack_dca;
-   stack_table as stack_rf2t;
-   stack_table as stack_af2;
 } from './modules/yunta.nf'
+include {
+   Join_tables;
+   Stack_tables as Stack_tables_AF2;
+   Stack_tables as Stack_tables_DCA;
+   Stack_tables as Stack_tables_RF2t;
+} from './modules/utils.nf'
 // include { GENE_NAME_TO_UNIPROT as GENE_NAME_TO_UNIPROT } from './modules/uniprot.nf'
 
 
@@ -478,30 +481,35 @@ workflow {
       .collectFile( newLine: true ) { [ "${it[0]}.fasta", "${it[1]}" ] }
       .toSortedList()
       .flatten()
-      .buffer( 
-         size: Math.min( params.batch_size, 100 ), 
-         remainder: true,
-      )
       .set { input_for_making_msas }
    
    if ( params.msa_method == "hhblits" ) {
 
       HHblits_MSA(
-         input_for_making_msas,
+         input_for_making_msas
+            .buffer( 
+               size: 1,
+               remainder: true,
+            ),
          db1,
          db2,
       )
          | set { msa_result }
 
    }
-   else if ( params.msa_method == "mmseqs2" ||  params.msa_method == "colabfold" ) {
+   else if ( params.msa_method == "colabfold" ) {
 
       Colabfold_MSA(
-         input_for_making_msas,
+         input_for_making_msas
+            .buffer( 
+               size: params.colabfold_batch_size, 
+               remainder: true,
+            ),
          db1,
          db2,
          Channel.value( !params.cpu_only ),
       )
+         | Convert_FASTA_to_A3M
          | set { msa_result }
 
    }
@@ -588,15 +596,17 @@ workflow {
          interspecies, 
          make_coevo_plots,
       )
-      // stack_dca(
-      //    run_dca.out.main
-      //       .groupTuple( 
-      //          by: 0,
-      //          sort: true,
-      //     ),  // Organism ID, [tsv, ...]
-      //    Channel.value( "dca" )
-      // ) // Organism ID, tsv
-       run_dca.out.main.set { stacked_dca }
+      Stack_tables_DCA(
+         run_af2.out.main
+            .groupTuple( 
+               by: 0,
+               sort: true,
+            ),  // Organism ID, [tsv, ...]
+         Channel.value( "interactions/dca-stacked" ),
+         Channel.value( "stacked" ),
+      )  // Organism ID, tsv
+      Stack_tables_DCA.out.main
+         .set { stacked_dca }
    }
 
    else {
@@ -612,15 +622,17 @@ workflow {
          interspecies, 
          make_coevo_plots,
       )
-      // stack_rf2t(
-      //    run_rf2track.out.main
-      //       .groupTuple( 
-      //          by: 0,
-      //          sort: true,
-      //       ),  // Organism ID, [tsv, ...]
-      //    Channel.value( "rf2t" )
-      // )  // Organism ID, tsv
-         run_rf2track.out.main.set { stacked_rf2t }
+      Stack_tables_RF2t(
+         run_af2.out.main
+            .groupTuple( 
+               by: 0,
+               sort: true,
+            ),  // Organism ID, [tsv, ...]
+         Channel.value( "interactions/rf2t-stacked" ),
+         Channel.value( "stacked" ),
+      )  // Organism ID, tsv
+      Stack_tables_RF2t.out.main
+         .set { stacked_rf2t }
    }
 
    else {
@@ -636,15 +648,17 @@ workflow {
          interspecies, 
          make_coevo_plots,
       )
-      // stack_af2(
-      //    run_af2.out.main
-      //       .groupTuple( 
-      //          by: 0,
-      //          sort: true,
-      //       ),  // Organism ID, [tsv, ...]
-      //    Channel.value( "af2" )
-      // )  // Organism ID, tsv
-      run_af2.out.main.set { stacked_af2 }
+      Stack_tables_AF2(
+         run_af2.out.main
+            .groupTuple( 
+               by: 0,
+               sort: true,
+            ),  // Organism ID, [tsv, ...]
+         Channel.value( "interactions/af2-stacked" ),
+         Channel.value( "stacked" ),
+      )  // Organism ID, tsv
+      Stack_tables_AF2.out.main
+         .set { stacked_af2 }
    }
 
    else {
@@ -654,7 +668,7 @@ workflow {
 
    }
 
-   stack_table_py(
+   Join_tables(
       stacked_dca
       .concat(
          stacked_rf2t,

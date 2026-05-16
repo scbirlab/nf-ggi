@@ -1,10 +1,10 @@
 process HHblits_MSA {
 
    tag "${fasta[0]}...${fasta[-1]}"
-   label 'big_cpu_mem'
+   label 'big_mem'
    
    errorStrategy 'retry'  // sometimes cluster will kill the job
-   maxRetries 1
+   maxRetries 2
 
    publishDir( 
       "${params.outputs}/msa/hhblits", 
@@ -23,7 +23,7 @@ process HHblits_MSA {
    // tuple val( fasta.getSimpleName() ), path( "*.a3m" )
 
    script:
-   def mem_per_job = (task.memory.getGiga() / task.cpus).toInteger()
+   def mem_per_job = Math.floor(0.8 * task.memory.getGiga() / task.cpus).toInteger()
    """
    set -euox pipefail
 
@@ -42,7 +42,8 @@ process HHblits_MSA {
             -o /dev/null \
             -cov 60 \
             -n 3 \
-            -realign -realign_max 10000" \
+            -realign -realign_max 10000 \
+            || [[ -s {.}.\$(basename \$db).out.a3m ]]" \
       ::: *.fasta
    done
 
@@ -72,13 +73,14 @@ process HHblits_MSA {
 process Colabfold_MSA {
 
    tag "${fasta[0]}...${fasta[-1]}"
-   label 'big_cpu_mem'
+   label 'all_cpu_mem'
+
    // container 'ghcr.io/soedinglab/mmseqs2:latest'
    // label 'gpu_single_short'
    container 'ghcr.io/soedinglab/mmseqs2:master-cuda12'
 
-   // errorStrategy 'retry'  // sometimes cluster will kill the job
-   // maxRetries 1
+   errorStrategy 'retry'  // sometimes cluster will kill the job, or mmseqs2 segfaults
+   maxRetries 2
 
    publishDir(
         "${params.outputs}/msa/colabfold",
@@ -87,15 +89,16 @@ process Colabfold_MSA {
    )
 
    input:
-   path( fasta )
+   path fasta
    tuple val( uniref_root ), path( uniref )
    tuple val( env_root ), path( bfd )
    val use_gpu
 
    output:
-   path( '*.a3m' )
+   path '*.a3m.fasta'
 
    script:
+   def split_mem = Math.floor(task.memory.getGiga() * 0.9).toInteger()
    // TODO: Allow GPU usage. Might need to have special databases.
    def gpu_flags = use_gpu ? "--gpu 1 --prefilter-mode 1" : "--prefilter-mode 1 --k-score 'seq:96,prof:80'"
    """
@@ -103,14 +106,16 @@ process Colabfold_MSA {
    #${use_gpu ? "mmseqs makepaddedseqdb targetDB targetDB_gpu && mmseqs rmdb targetDB && mv targetDB_gpu targetDB" : ""}
    set -euox pipefail
 
-   BASE_FLAGS="--db-load-mode 2 --threads ${task.cpus}"
+   BASE_FLAGS="--db-load-mode 0 --threads ${task.cpus}"
+   MEM_FLAG=" --split-memory-limit ${split_mem}G --split 0"
 
    mmseqs createdb *.fasta query
 
    dbs=("${uniref_root}" "${env_root}")
    for db in \${dbs[@]}
    do
-
+      DB_SEQ="\$db".idx #_seq
+      DB_ALN="\$db.idx" #_aln
       if [ "\$db" == "${uniref_root}" ]
       then
          QUERY=query
@@ -119,7 +124,7 @@ process Colabfold_MSA {
       fi
 
       mmseqs search "\$QUERY" "\$db" result_"\$db" tmp_"\$db" \
-         \$BASE_FLAGS \
+         \$BASE_FLAGS \$MEM_FLAG \
          --num-iterations 3 \
          --prefilter-mode 0 \
          -a \
@@ -142,13 +147,13 @@ process Colabfold_MSA {
       fi
 
       # Expand: fetch all cluster members for matched representatives
-      mmseqs expandaln "\$EXPAND_QUERY" "\$db.idx" result_"\$db" "\$db.idx" result_exp_"\$db" \
+      mmseqs expandaln "\$EXPAND_QUERY" "\$DB_SEQ" result_"\$db" "\$DB_ALN" result_exp_"\$db" \
          \$BASE_FLAGS \
          --expansion-mode 0 \
          -e inf \$EXPAND_FLAGS
 
       # Realign expanded hits against the profile
-      mmseqs align "\$ALIGN_QUERY" "\$db.idx" result_exp_"\$db" result_exp_realign_"\$db" \
+      mmseqs align "\$ALIGN_QUERY" "\$DB_SEQ" result_exp_"\$db" result_exp_realign_"\$db" \
          \$BASE_FLAGS \
          -e 10 \
          --max-accept 100000 \
@@ -156,7 +161,7 @@ process Colabfold_MSA {
          -a
 
       # Filter
-      mmseqs filterresult query "\$db.idx" result_exp_realign_"\$db" result_exp_realign_filter_"\$db" \
+      mmseqs filterresult query "\$DB_SEQ" result_exp_realign_"\$db" result_exp_realign_filter_"\$db" \
          \$BASE_FLAGS \
          --qid 0 \
          --qsc 0.8 \
@@ -165,9 +170,9 @@ process Colabfold_MSA {
          --filter-min-enable 100
 
       # Write A3M with diversity subsampling
-      mmseqs result2msa query "\$db.idx" result_exp_realign_filter_"\$db" "\$db".a3m \
+      mmseqs result2msa query "\$DB_SEQ" result_exp_realign_filter_"\$db" "\$db".aln.fasta \
          \$BASE_FLAGS \
-         --msa-format-mode 6 \
+         --msa-format-mode 2 \
          --filter-msa 1 \
          --filter-min-enable 1000 \
          --diff 3000 \
@@ -183,17 +188,17 @@ process Colabfold_MSA {
    done
 
    # Merge and clean up
-   mmseqs mergedbs query msa.a3m *.a3m
-   for f in *.a3m
+   mmseqs mergedbs query msa.aln.fasta *.aln.fasta
+   for f in *.aln.fasta
    do
-      [[ "\$f" == "msa.a3m" ]] && continue
+      [[ "\$f" == "msa.aln.fasta" ]] && continue
       mmseqs rmdb "\$f"
    done
 
-   mmseqs unpackdb msa.a3m . --unpack-name-mode 1 --unpack-suffix .temp.a3m
-   mmseqs rmdb msa.a3m
+   mmseqs unpackdb msa.aln.fasta . --unpack-name-mode 1 --unpack-suffix .temp.fasta
+   mmseqs rmdb msa.aln.fasta
    # strip db prefix and description, keep bare accession
-   for f in *.temp.a3m
+   for f in *.temp.fasta
    do
       header=\$(head -n1 "\$f")
       acc=\$(
@@ -206,7 +211,7 @@ process Colabfold_MSA {
             }
          '
       )
-      [[ -n "\$acc" ]] && mv "\$f" "\${acc}.a3m"
+      [[ -n "\$acc" ]] && mv "\$f" "\${acc}.a3m.fasta"
    done
 
    mmseqs rmdb prof_result_uniref
@@ -219,7 +224,68 @@ process Colabfold_MSA {
    for f in *.fasta
    do
       base="\${f%.fasta}"
-      head -n2 "\$f" > "\${base}.a3m"
+      head -n2 "\$f" > "\${base}.a3m.fasta"
    done
+   """
+}
+
+process Convert_FASTA_to_A3M {
+
+   tag "${fasta[0]}...${fasta[-1]}"
+   // label 'all_cpu_mem'
+
+   // errorStrategy 'retry'  // sometimes cluster will kill the job
+   // maxRetries 1
+
+   publishDir(
+      "${params.outputs}/msa/colabfold-a3m",
+      mode: 'copy',
+   //   saveAs: { "${fasta.simpleName}.a3m" }
+   )
+
+   input:
+   path fasta
+
+   output:
+   path '*.a3m'
+
+   script:
+   """
+   #!/usr/bin/env python
+   from glob import glob
+   import os
+   import sys
+
+   for filename in glob("*.a3m.fasta"):
+      seqs, order, cur = {}, [], None
+      with open(filename, "r") as f:
+         for line in f:
+            line = line.rstrip()
+            if line.startswith('>'):
+                  cur = line[1:]
+                  order.append(cur)
+                  seqs[cur] = ''
+            else:
+                  seqs[cur] += line
+
+      query = seqs[order[0]]
+      match_cols = {i for i, c in enumerate(query) if c != '-'}
+      outfile = filename.replace('.a3m.fasta', '.a3m')
+      with open(outfile, 'w') as out:
+         for name in order:
+            print('>' + name, file=out)
+            s = seqs[name]
+            if name == order[0]:
+               # Query: defines match columns, no gaps/insertions
+               print(query.replace('-', ''), file=out)
+            else:
+               a3m = ''
+               for i, c in enumerate(s):
+                  if i in match_cols:
+                     a3m += c          # uppercase residue or '-' deletion
+                  elif c != '-':
+                     a3m += c.lower()  # insertion column, skip gaps
+               print(a3m, file=out)
+
    """
 }

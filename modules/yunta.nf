@@ -3,7 +3,7 @@ process run_dca {
    label 'big_time'
    tag "${id}-${uniprot_id_bait}:${batch_idx}"
    stageInMode 'link'
-   errorStrategy 'retry'
+   errorStrategy 'ignore' //'retry'
    maxRetries 2
 
    publishDir( 
@@ -62,7 +62,7 @@ process run_rf2track {
    label 'gpu_single'
    tag "${id}-${uniprot_id_bait}:${batch_idx}"
    stageInMode 'link'
-   errorStrategy 'retry'
+   errorStrategy 'ignore' //'retry'
    maxRetries 2
 
    publishDir( 
@@ -228,71 +228,4 @@ process run_af2 {
 }
 
 
-process stack_table {
 
-   tag "${id}-${filename}"
-
-   publishDir( 
-      "${params.outputs}/ppi", 
-      mode: 'copy',
-      saveAs: { "${id}-${filename}.tsv" },
-   )
-
-   input:
-   tuple val( id ), path( tables, stageAs: "inputs/????.tsv" )
-   val filename
-
-   output:
-   tuple val( id ), path( "table.tsv" )
-
-   script:
-   """
-   tables=( inputs/*.tsv )
-   head -n1 "\${tables[0]}" \
-   | cat - <(tail -n+2 -q "\${tables[@]}") \
-   > "table0.tsv"
-
-   head -n1 "table0.tsv" \
-   | cat - <(tail -n+2 "table0.tsv" | sort -k3,4 ) \
-   > "table.tsv" \
-   && rm "table0.tsv"
-   """
-}
-
-
-process stack_table_py {
-
-   tag "${id}-${filename}"
-
-   publishDir( 
-      "${params.outputs}/ppi", 
-      mode: 'copy',
-      saveAs: { "${id}.${filename}.tsv" },
-   )
-
-   input:
-   tuple val( id ), path( tables, stageAs: "inputs/????.tsv" )
-   val filename
-
-   output:
-   tuple val( id ), path( "table.tsv" )
-
-   script:
-   """
-   #!/usr/bin/env python
-   from glob import glob
-   import pandas as pd
-   
-   files = glob("inputs/*.tsv")
-   df = None
-   for f in files:
-      if df is None:
-         df = pd.read_csv(f, sep="\\t")
-         continue
-      else:
-         df = df.merge(pd.read_csv(f, sep="\\t"), how="outer")
-   
-   df.sort_values("ID").to_csv("table.tsv", sep="\\t", index=False)
-   
-   """
-}
