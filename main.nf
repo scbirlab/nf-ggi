@@ -597,7 +597,7 @@ workflow {
          make_coevo_plots,
       )
       Stack_tables_DCA(
-         run_af2.out.main
+         run_dca.out.main
             .groupTuple( 
                by: 0,
                sort: true,
@@ -605,7 +605,7 @@ workflow {
          Channel.value( "interactions/dca-stacked" ),
          Channel.value( "stacked" ),
       )  // Organism ID, tsv
-      Stack_tables_DCA.out.main
+      Stack_tables_DCA.out
          .set { stacked_dca }
    }
 
@@ -623,7 +623,7 @@ workflow {
          make_coevo_plots,
       )
       Stack_tables_RF2t(
-         run_af2.out.main
+         run_rf2track.out.main
             .groupTuple( 
                by: 0,
                sort: true,
@@ -631,7 +631,7 @@ workflow {
          Channel.value( "interactions/rf2t-stacked" ),
          Channel.value( "stacked" ),
       )  // Organism ID, tsv
-      Stack_tables_RF2t.out.main
+      Stack_tables_RF2t.out
          .set { stacked_rf2t }
    }
 
@@ -657,7 +657,7 @@ workflow {
          Channel.value( "interactions/af2-stacked" ),
          Channel.value( "stacked" ),
       )  // Organism ID, tsv
-      Stack_tables_AF2.out.main
+      Stack_tables_AF2.out
          .set { stacked_af2 }
    }
 
@@ -678,7 +678,8 @@ workflow {
          by: 0,
          sort: true,
       ),  // Organism ID, [tsv, ...]
-      Channel.value( "ppi-table" ),
+      Channel.value( "ppi/joined" ),
+      Channel.value( "all" ),
    )
    | set { ppi_outputs }
    // stacked_dca

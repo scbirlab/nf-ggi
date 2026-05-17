@@ -75,9 +75,9 @@ process Colabfold_MSA {
    tag "${fasta[0]}...${fasta[-1]}"
    label 'all_cpu_mem'
 
-   // container 'ghcr.io/soedinglab/mmseqs2:latest'
+   container 'ghcr.io/soedinglab/mmseqs2:15-6f452'
    // label 'gpu_single_short'
-   container 'ghcr.io/soedinglab/mmseqs2:master-cuda12'
+   // container 'ghcr.io/soedinglab/mmseqs2:master-cuda12'
 
    errorStrategy 'retry'  // sometimes cluster will kill the job, or mmseqs2 segfaults
    maxRetries 2
@@ -101,6 +101,7 @@ process Colabfold_MSA {
    def split_mem = Math.floor(task.memory.getGiga() * 0.9).toInteger()
    // TODO: Allow GPU usage. Might need to have special databases.
    def gpu_flags = use_gpu ? "--gpu 1 --prefilter-mode 1" : "--prefilter-mode 1 --k-score 'seq:96,prof:80'"
+   def cmd = use_gpu ? "entrypoint" : "entrypoint"
    """
    # TODO: Allow GPU usage. Make GPU-compatible database in a separate process?
    #${use_gpu ? "mmseqs makepaddedseqdb targetDB targetDB_gpu && mmseqs rmdb targetDB && mv targetDB_gpu targetDB" : ""}
@@ -109,7 +110,7 @@ process Colabfold_MSA {
    BASE_FLAGS="--db-load-mode 0 --threads ${task.cpus}"
    MEM_FLAG=" --split-memory-limit ${split_mem}G --split 0"
 
-   mmseqs createdb *.fasta query
+   "${cmd}" createdb *.fasta query
 
    dbs=("${uniref_root}" "${env_root}")
    for db in \${dbs[@]}
@@ -123,7 +124,7 @@ process Colabfold_MSA {
          QUERY=prof_result_uniref
       fi
 
-      mmseqs search "\$QUERY" "\$db" result_"\$db" tmp_"\$db" \
+      "${cmd}" search "\$QUERY" "\$db" result_"\$db" tmp_"\$db" \
          \$BASE_FLAGS \$MEM_FLAG \
          --num-iterations 3 \
          --prefilter-mode 0 \
@@ -135,8 +136,8 @@ process Colabfold_MSA {
       if [ "\$db" == "${uniref_root}" ]
       then
          # Extract profile from last iteration
-         mmseqs mvdb tmp_"\$db"/latest/profile_1 prof_result_uniref
-         mmseqs lndb query_h prof_result_uniref_h
+         "${cmd}" mvdb tmp_"\$db"/latest/profile_1 prof_result_uniref
+         "${cmd}" lndb query_h prof_result_uniref_h
          EXPAND_QUERY="query"
          EXPAND_FLAGS="--expand-filter-clusters 1 --max-seq-id 0.95"
          ALIGN_QUERY="prof_result_uniref"
@@ -147,13 +148,13 @@ process Colabfold_MSA {
       fi
 
       # Expand: fetch all cluster members for matched representatives
-      mmseqs expandaln "\$EXPAND_QUERY" "\$DB_SEQ" result_"\$db" "\$DB_ALN" result_exp_"\$db" \
+      "${cmd}" expandaln "\$EXPAND_QUERY" "\$DB_SEQ" result_"\$db" "\$DB_ALN" result_exp_"\$db" \
          \$BASE_FLAGS \
          --expansion-mode 0 \
          -e inf \$EXPAND_FLAGS
 
       # Realign expanded hits against the profile
-      mmseqs align "\$ALIGN_QUERY" "\$DB_SEQ" result_exp_"\$db" result_exp_realign_"\$db" \
+      "${cmd}" align "\$ALIGN_QUERY" "\$DB_SEQ" result_exp_"\$db" result_exp_realign_"\$db" \
          \$BASE_FLAGS \
          -e 10 \
          --max-accept 100000 \
@@ -161,7 +162,7 @@ process Colabfold_MSA {
          -a
 
       # Filter
-      mmseqs filterresult query "\$DB_SEQ" result_exp_realign_"\$db" result_exp_realign_filter_"\$db" \
+      "${cmd}" filterresult query "\$DB_SEQ" result_exp_realign_"\$db" result_exp_realign_filter_"\$db" \
          \$BASE_FLAGS \
          --qid 0 \
          --qsc 0.8 \
@@ -170,7 +171,7 @@ process Colabfold_MSA {
          --filter-min-enable 100
 
       # Write A3M with diversity subsampling
-      mmseqs result2msa query "\$DB_SEQ" result_exp_realign_filter_"\$db" "\$db".aln.fasta \
+      "${cmd}" result2msa query "\$DB_SEQ" result_exp_realign_filter_"\$db" "\$db".aln.fasta \
          \$BASE_FLAGS \
          --msa-format-mode 2 \
          --filter-msa 1 \
@@ -181,22 +182,22 @@ process Colabfold_MSA {
          --max-seq-id 0.95
 
       # Clean up
-      mmseqs rmdb result_"\$db"
-      mmseqs rmdb result_exp_"\$db"
-      mmseqs rmdb result_exp_realign_"\$db"
-      mmseqs rmdb result_exp_realign_filter_"\$db"
+      "${cmd}" rmdb result_"\$db"
+      "${cmd}" rmdb result_exp_"\$db"
+      "${cmd}" rmdb result_exp_realign_"\$db"
+      "${cmd}" rmdb result_exp_realign_filter_"\$db"
    done
 
    # Merge and clean up
-   mmseqs mergedbs query msa.aln.fasta *.aln.fasta
+   "${cmd}" mergedbs query msa.aln.fasta *.aln.fasta
    for f in *.aln.fasta
    do
       [[ "\$f" == "msa.aln.fasta" ]] && continue
-      mmseqs rmdb "\$f"
+      "${cmd}" rmdb "\$f"
    done
 
-   mmseqs unpackdb msa.aln.fasta . --unpack-name-mode 1 --unpack-suffix .temp.fasta
-   mmseqs rmdb msa.aln.fasta
+   "${cmd}" unpackdb msa.aln.fasta . --unpack-name-mode 1 --unpack-suffix .temp.fasta
+   "${cmd}" rmdb msa.aln.fasta
    # strip db prefix and description, keep bare accession
    for f in *.temp.fasta
    do
@@ -214,8 +215,8 @@ process Colabfold_MSA {
       [[ -n "\$acc" ]] && mv "\$f" "\${acc}.a3m.fasta"
    done
 
-   mmseqs rmdb prof_result_uniref
-   mmseqs rmdb prof_result_uniref_h
+   "${cmd}" rmdb prof_result_uniref
+   "${cmd}" rmdb prof_result_uniref_h
    rm -rf tmp_*
 
    """
