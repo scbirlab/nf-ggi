@@ -43,7 +43,7 @@ process run_dca {
       <(echo "${msa1}") \
       --msa2 \$MSA_LIST \
       --list-file  ${interspecies ? "--interspecies" : ""} ${plots ?  "--plot plot-dca" : ""} \
-      --apc \
+      --apc\
       --output "dca.tsv"
    
    """
@@ -100,7 +100,7 @@ process run_rf2track {
    export XDG_CACHE_HOME="\${PWD}/.cache"
    PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True CUDA_LAUNCH_BLOCKING=1 \
    yunta rf2t-single \
-      <(echo "${msa1}") \
+      <(echo "${msa1}")\
       --msa2 \$MSA_LIST \
       --list-file ${interspecies ? "--interspecies" : ""} ${plots ?  "--plot plot-rf2t" : ""} \
       --output "rf2t.tsv"

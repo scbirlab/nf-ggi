@@ -27,7 +27,7 @@ process Stack_tables {
        pd.concat([
            pd.read_csv(f, sep="\\t") for f in files
        ])
-       .to_csv("table.tsv")
+       .to_csv("table.tsv", index=False, sep="\\t")
    )
    
    """
@@ -56,16 +56,21 @@ process Join_tables {
    """
    #!/usr/bin/env python
    from glob import glob
+
+   from carabiner import print_err
    import pandas as pd
    
    files = glob("inputs/*.tsv")
    df = None
    for f in files:
+      print_err(f)
+      df_right = pd.read_csv(f, sep="\\t")
       if df is None:
-         df = pd.read_csv(f, sep="\\t")
+         df = df_right
          continue
       else:
-         df = df.merge(pd.read_csv(f, sep="\\t"), how="outer")
+         print_err("Common columns:", set(df.columns).intersection(df_right.columns))
+         df = df.merge(df_right, how="outer")
    
    df.sort_values("ID").to_csv("table.tsv", sep="\\t", index=False)
    
