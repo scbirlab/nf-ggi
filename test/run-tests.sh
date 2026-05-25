@@ -15,7 +15,8 @@ then
     echo $bfd > "$bfd"_test
 else
     export SINGULARITY_FAKEROOT=1
-    docker_flag=''
+    # docker_flag='-profile local -with-singularity'
+    docker_flag=
     uniclust="/nemo/lab/johnsone/reference/hhdb/uniclust30/uniclust30_2018_08"
     bfd="/nemo/lab/johnsone/reference/hhdb/bfd_metaclust/bfd_metaclust_clu_complete_id30_c90_final_seq.sorted_opt"
 fi

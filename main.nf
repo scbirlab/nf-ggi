@@ -103,11 +103,28 @@ if ( !params.sample_sheet ) {
    }
 
 }
-if ( !params.uniclust ) {
-   throw new Exception("!!! PARAMETER MISSING: Please provide a path to UniClust database.")
+if ( params.msa_method == "hhblits" ) {
+
+   if ( !params.uniclust ) {
+      throw new Exception("!!! PARAMETER MISSING: Please provide a path to UniClust database for msa_method=${params.msa_method}.")
+   }
+   if ( !params.bfd ) {
+      throw new Exception("!!! PARAMETER MISSING: Please provide a path to BFD database for msa_method=${params.msa_method}.")
+   }
+
 }
-if ( !params.bfd ) {
-   throw new Exception("!!! PARAMETER MISSING: Please provide a path to BFD database.")
+else if ( params.msa_method == "mmseqs2" || params.msa_method == "colabfold" ) {
+
+   if ( !params.uniref30 ) {
+      throw new Exception("!!! PARAMETER MISSING: Please provide a path to uniref30 database for msa_method=${params.msa_method}.")
+   }
+   if ( !params.colabfold_envdb ) {
+      throw new Exception("!!! PARAMETER MISSING: Please provide a path to colabfold_envdb database for msa_method=${params.msa_method}.")
+   }
+
+}
+else {
+   throw new Exception("!!! PARAMETER ERROR: msa_method was '${params.msa_method}' but must be one of 'hhblits' (default) or 'mmseqs2' (or 'colabfold')")
 }
 
 log.info pipeline_title + """\
@@ -146,8 +163,9 @@ log.info pipeline_title + """\
 
 // load modules
 include {
-   make_msa_from_fasta;
-   make_msa_from_fasta as make_msa_from_fasta_bait;
+   HHblits_MSA;
+   Colabfold_MSA;
+   Convert_FASTA_to_A3M;
 } from './modules/msa.nf'
 include {
    fetch_rhea_database;
@@ -170,23 +188,68 @@ include {
    run_dca;
    run_rf2track;
    run_af2;
-   stack_table_py;
-   stack_table as stack_dca;
-   stack_table as stack_rf2t;
-   stack_table as stack_af2;
 } from './modules/yunta.nf'
+include {
+   Join_tables;
+   Stack_tables as Stack_tables_AF2;
+   Stack_tables as Stack_tables_DCA;
+   Stack_tables as Stack_tables_RF2t;
+} from './modules/utils.nf'
 // include { GENE_NAME_TO_UNIPROT as GENE_NAME_TO_UNIPROT } from './modules/uniprot.nf'
+
+
+def msaSeqLength(a3mFile) {
+    // First non-header line; strip a3m lowercase insertions for ungapped length
+    def seq = a3mFile.readLines().find { !it.startsWith('>') && it.trim() }
+    return seq ? seq.replaceAll('[a-z]', '').length() : 0
+}
+
 
 workflow {
 
-   Channel.value( tuple(
-      file( params.bfd ).getName(),
-      file( "${params.bfd}_*", checkIfExists: true ),
-   ) ).set { bfd }
-   Channel.value( tuple(
-      file( params.uniclust ).getName(),
-      file( "${params.uniclust}{_,.}*", checkIfExists: true ),
-   ) ).set { uniclust }
+   if ( params.msa_method == "mmseqs2" ) params.msa_method = "colabfold"
+
+   if ( params.msa_method == "hhblits" ) {
+
+      Channel.value( tuple(
+         file( params.bfd ).getName(),
+         file( 
+            "${params.bfd}_*", 
+            checkIfExists: true,
+         ),
+      ) )
+         .set { db1 }
+      Channel.value( tuple(
+         file( params.uniclust ).getName(),
+         file( 
+            "${params.uniclust}{_,.}*", 
+            checkIfExists: true,
+         ),
+      ) )
+         .set { db2 }
+
+   }
+   else if ( params.msa_method == "mmseqs2" |  params.msa_method == "colabfold" ) {
+
+      Channel.value( tuple(
+         file( params.uniref30 ).getName(),
+         file( 
+            "${params.uniref30}{_,.}*", 
+            checkIfExists: true,
+         ),
+      ) )
+         .set { db1 }
+      Channel.value( tuple(
+         file( params.colabfold_envdb ).getName(),
+         file( 
+            "${params.colabfold_envdb}{_,.}*", 
+            checkIfExists: true,
+         ),
+      ) )
+         .set { db2 }
+
+   }
+   
    Channel.of( params.rhea_url ).set { rhea_url }
 
    if ( params.sample_sheet ) {
@@ -227,7 +290,6 @@ workflow {
 
    }
    
-
    if ( mode == 'self' || mode == 'bait' ) {
 
       fetch_fastas_from_organism_id(
@@ -414,17 +476,52 @@ workflow {
    }
 
    all_fasta_info
-      .map { tuple( it[1], it[3] ) }  // UniProtID, FASTA text
-      .collectFile( newLine: true ) { [ "${it[0]}.fasta", "${it[1]}" ] }
-      .map { tuple( it.getSimpleName(), it ) }
+      .map { v -> tuple( v[1], v[3] ) }  // UniProtID, FASTA text
       .unique()
+      .collectFile( newLine: true ) { [ "${it[0]}.fasta", "${it[1]}" ] }
+      .toSortedList()
+      .flatten()
       .set { input_for_making_msas }
-   make_msa_from_fasta(
-      input_for_making_msas,
-      uniclust,
-      bfd,
-   )
-   make_msa_from_fasta.out  // UniProtID, MSA
+   
+   if ( params.msa_method == "hhblits" ) {
+
+      HHblits_MSA(
+         input_for_making_msas
+            .buffer( 
+               size: 1,
+               remainder: true,
+            ),
+         db1,
+         db2,
+      )
+         | set { msa_result }
+
+   }
+   else if ( params.msa_method == "colabfold" ) {
+
+      Colabfold_MSA(
+         input_for_making_msas
+            .buffer( 
+               size: params.colabfold_batch_size, 
+               remainder: true,
+            ),
+         db1,
+         db2,
+         Channel.value( !params.cpu_only ),
+      )
+         | Convert_FASTA_to_A3M
+         | set { msa_result }
+
+   }
+   else {
+
+      error "msa_method was ${params.msa_method} but must be one of 'hhblits' (default) or 'mmseqs2' (or 'colabfold')"
+
+   }
+   
+   msa_result  // MSA files
+      .flatten()
+      .map { v -> tuple( v.simpleName, v ) }
       .combine(
          id_to_uniprot_map,
          by: 0,
@@ -477,15 +574,18 @@ workflow {
          sort: true,
       )  // Organism ID, Bait UniProt ID, Bait MSA, batch_i, [UniProtID, ...], [MSA, ...]
       .filter { it[-1].size() > 0 }  // filter out trivial (size-0) elements
+      .filter { v -> 
+         if ( !params.max_protein_length ) return true
+         def len = msaSeqLength( v[2] )
+         if ( len > params.max_protein_length ) {
+               //log.warn "Skipping ${v[0]}-${v[1]}: bait length ${len} > ${params.max_protein_length}"
+               return false
+         }
+         return true
+      }
       .set { msa_pairs0 }
-
-   if ( params.test ) {
-      msa_pairs0.take(2).set { msa_pairs }
-   }
-
-   else {
-      msa_pairs0.set { msa_pairs }
-   }
+   ( params.test ? msa_pairs0.take(2) : msa_pairs0 )
+      .set { msa_pairs }
 
    // Calculate evolutionary coupling
    Channel.value( params.bait_is_taxon || params.interspecies ).set { interspecies }
@@ -496,15 +596,17 @@ workflow {
          interspecies, 
          make_coevo_plots,
       )
-      // stack_dca(
-      //    run_dca.out.main
-      //       .groupTuple( 
-      //          by: 0,
-      //          sort: true,
-      //     ),  // Organism ID, [tsv, ...]
-      //    Channel.value( "dca" )
-      // ) // Organism ID, tsv
-       run_dca.out.main.set { stacked_dca }
+      Stack_tables_DCA(
+         run_dca.out.main
+            .groupTuple( 
+               by: 0,
+               sort: true,
+            ),  // Organism ID, [tsv, ...]
+         Channel.value( "interactions/dca-stacked" ),
+         Channel.value( "stacked" ),
+      )  // Organism ID, tsv
+      Stack_tables_DCA.out
+         .set { stacked_dca }
    }
 
    else {
@@ -520,15 +622,17 @@ workflow {
          interspecies, 
          make_coevo_plots,
       )
-      // stack_rf2t(
-      //    run_rf2track.out.main
-      //       .groupTuple( 
-      //          by: 0,
-      //          sort: true,
-      //       ),  // Organism ID, [tsv, ...]
-      //    Channel.value( "rf2t" )
-      // )  // Organism ID, tsv
-         run_rf2track.out.main.set { stacked_rf2t }
+      Stack_tables_RF2t(
+         run_rf2track.out.main
+            .groupTuple( 
+               by: 0,
+               sort: true,
+            ),  // Organism ID, [tsv, ...]
+         Channel.value( "interactions/rf2t-stacked" ),
+         Channel.value( "stacked" ),
+      )  // Organism ID, tsv
+      Stack_tables_RF2t.out
+         .set { stacked_rf2t }
    }
 
    else {
@@ -544,15 +648,17 @@ workflow {
          interspecies, 
          make_coevo_plots,
       )
-      // stack_af2(
-      //    run_af2.out.main
-      //       .groupTuple( 
-      //          by: 0,
-      //          sort: true,
-      //       ),  // Organism ID, [tsv, ...]
-      //    Channel.value( "af2" )
-      // )  // Organism ID, tsv
-      run_af2.out.main.set { stacked_af2 }
+      Stack_tables_AF2(
+         run_af2.out.main
+            .groupTuple( 
+               by: 0,
+               sort: true,
+            ),  // Organism ID, [tsv, ...]
+         Channel.value( "interactions/af2-stacked" ),
+         Channel.value( "stacked" ),
+      )  // Organism ID, tsv
+      Stack_tables_AF2.out
+         .set { stacked_af2 }
    }
 
    else {
@@ -562,7 +668,7 @@ workflow {
 
    }
 
-   stack_table_py(
+   Join_tables(
       stacked_dca
       .concat(
          stacked_rf2t,
@@ -572,7 +678,8 @@ workflow {
          by: 0,
          sort: true,
       ),  // Organism ID, [tsv, ...]
-      Channel.value( "ppi-table" ),
+      Channel.value( "ppi/joined" ),
+      Channel.value( "all" ),
    )
    | set { ppi_outputs }
    // stacked_dca
