@@ -229,7 +229,6 @@ process fetch_fastas_from_uniprot_ids {
 }
 
 
-
 process map_uniprot_ids_from_file {
 
    tag "${id}-${organism_id}-${column}:${from_type}"

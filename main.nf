@@ -527,6 +527,15 @@ workflow {
          by: 0,
       )  // UniProtID, MSA, Organism ID 
       .map { tuple( it[2], it[0], it[1] ) }  // Organism ID, UniProtID, MSA
+      .filter { v -> 
+         if ( !params.max_protein_length ) return true
+         def len = msaSeqLength( v[-1] )
+         if ( len > params.max_protein_length ) {
+               log.warn "Skipping ${v[1]}: MSA length ${len} > ${params.max_protein_length}"
+               return false
+         }
+         return true
+      }
       .tap { all_msas }
       .join(
          fastas_A2.map{ it[0..1] }.unique(),
@@ -574,15 +583,6 @@ workflow {
          sort: true,
       )  // Organism ID, Bait UniProt ID, Bait MSA, batch_i, [UniProtID, ...], [MSA, ...]
       .filter { it[-1].size() > 0 }  // filter out trivial (size-0) elements
-      .filter { v -> 
-         if ( !params.max_protein_length ) return true
-         def len = msaSeqLength( v[2] )
-         if ( len > params.max_protein_length ) {
-               //log.warn "Skipping ${v[0]}-${v[1]}: bait length ${len} > ${params.max_protein_length}"
-               return false
-         }
-         return true
-      }
       .set { msa_pairs0 }
    ( params.test ? msa_pairs0.take(2) : msa_pairs0 )
       .set { msa_pairs }
