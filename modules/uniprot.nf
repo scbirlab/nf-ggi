@@ -229,7 +229,6 @@ process fetch_fastas_from_uniprot_ids {
 }
 
 
-
 process map_uniprot_ids_from_file {
 
    tag "${id}-${organism_id}-${column}:${from_type}"
@@ -287,9 +286,9 @@ process map_gene_names_from_file {
 
    script:
    """
-   set -x
+   set -eox pipefail
 
-   bash ${projectDir}/bin/uniprot/uniprot-ids.sh \
+   bash ${projectDir}/bin/uniprot/uniprot-ids2.sh \
       "${table}" "${column}" \
       "uniprot-ids.csv" \
       Gene_Name UniProtKB
@@ -300,9 +299,10 @@ process map_gene_names_from_file {
    pd.merge(
       pd.read_csv("${table}", sep="\\t"),
       pd.read_csv("uniprot-ids.csv", sep=",").rename(columns={"Gene_Name": "${out_column}"}),
-   ).drop_duplicates().to_csv("named-ids.tsv", sep="\\t", index=False)
+   ).drop_duplicates().to_csv("named-ids0.tsv", sep="\\t", index=False)
    
    '
+   mv "named-ids0.tsv" "named-ids.tsv"
 
    """
 
@@ -312,7 +312,7 @@ process map_gene_names_from_file {
 
    cp ${projectDir}/data/559292-dca-stub.tsv input.tsv
 
-   bash ${projectDir}/bin/uniprot/uniprot-ids.sh \
+   bash ${projectDir}/bin/uniprot/uniprot-ids2.sh \
       input.tsv "${column}" \
       "uniprot-ids.csv" \
       Gene_Name UniProtKB
@@ -323,9 +323,10 @@ process map_gene_names_from_file {
    pd.merge(
       pd.read_csv("input.tsv", sep="\\t"),
       pd.read_csv("uniprot-ids.csv", sep=",").rename(columns={"Gene_Name": "${out_column}"}),
-   ).drop_duplicates().to_csv("named-ids.tsv", sep="\\t", index=False)
+   ).drop_duplicates().to_csv("named-ids0.tsv", sep="\\t", index=False)
    
    '
+   mv "named-ids0.tsv" "named-ids.tsv"
 
    """
 
